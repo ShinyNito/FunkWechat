@@ -125,11 +125,12 @@ func (at *AccessToken) RefreshToken(ctx context.Context) (string, error) {
 		return "", core.NewWechatError(result.ErrCode, result.ErrMsg)
 	}
 
-	// 缓存 token（提前 5 分钟过期）
-	ttl := time.Duration(result.ExpiresIn-tokenExpireBuffer) * time.Second
-	if ttl < 0 {
-		ttl = time.Duration(result.ExpiresIn) * time.Second
+	// 缓存 token（提前 5 分钟过期，最小缓存 1 秒防止出现负值）
+	ttlSeconds := result.ExpiresIn - tokenExpireBuffer
+	if ttlSeconds < 1 {
+		ttlSeconds = 1
 	}
+	ttl := time.Duration(ttlSeconds) * time.Second
 
 	if err := at.cache.Set(ctx, cacheKey, result.AccessToken, ttl); err != nil {
 		at.logger.Warn("cache access_token failed",

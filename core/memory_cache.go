@@ -36,18 +36,27 @@ func NewMemoryCache() *MemoryCache {
 // Get 获取缓存值
 func (c *MemoryCache) Get(ctx context.Context, key string) (string, bool) {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	item, exists := c.items[key]
 	if !exists {
+		c.mu.RUnlock()
 		return "", false
 	}
 
 	if item.isExpired() {
+		c.mu.RUnlock()
+
+		c.mu.Lock()
+		if current, ok := c.items[key]; ok && current.isExpired() {
+			delete(c.items, key)
+		}
+		c.mu.Unlock()
+
 		return "", false
 	}
 
-	return item.value, true
+	value := item.value
+	c.mu.RUnlock()
+	return value, true
 }
 
 // Set 设置缓存值

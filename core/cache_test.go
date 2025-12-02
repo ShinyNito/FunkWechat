@@ -147,6 +147,23 @@ func TestMemoryCache_Expiration(t *testing.T) {
 	}
 }
 
+func TestMemoryCache_GetRemovesExpiredItem(t *testing.T) {
+	cache := NewMemoryCache()
+	ctx := context.Background()
+
+	_ = cache.Set(ctx, "temp", "value", 5*time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
+
+	_, ok := cache.Get(ctx, "temp")
+	assert.False(t, ok)
+
+	cache.mu.RLock()
+	_, exists := cache.items["temp"]
+	cache.mu.RUnlock()
+
+	assert.False(t, exists, "expired key should be removed after access")
+}
+
 func TestMemoryCache_Overwrite(t *testing.T) {
 	cache := NewMemoryCache()
 	ctx := context.Background()
