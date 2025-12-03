@@ -2,9 +2,7 @@ package miniprogram
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -14,8 +12,8 @@ import (
 )
 
 const (
-	// accessTokenURL 获取 access_token 的 URL
-	accessTokenURL = "https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=%s&secret=%s"
+	// accessTokenPath 获取 access_token 的路径
+	accessTokenPath = "/cgi-bin/token"
 	// 缓存 key 前缀
 	accessTokenCacheKeyPrefix = "miniprogram:access_token:"
 	// token 提前过期时间（秒），避免边界问题
@@ -26,37 +24,38 @@ const (
 type accessTokenResponse struct {
 	AccessToken string `json:"access_token"`
 	ExpiresIn   int    `json:"expires_in"`
-	ErrCode     int    `json:"errcode"`
-	ErrMsg      string `json:"errmsg"`
 }
 
 // AccessToken 小程序 AccessToken 管理
 type AccessToken struct {
-	appID      string
-	appSecret  string
-	cache      core.Cache
-	httpClient *http.Client
-	logger     *slog.Logger
-	mu         sync.Mutex
+	appID     string
+	appSecret string
+	cache     core.Cache
+	client    *core.Client
+	logger    *slog.Logger
+	mu        sync.Mutex
 }
 
 // NewAccessToken 创建 AccessToken 实例
 func NewAccessToken(appID, appSecret string, cache core.Cache, httpClient *http.Client, logger *slog.Logger) *AccessToken {
-	if httpClient == nil {
-		httpClient = &http.Client{
-			Timeout: 10 * time.Second,
-		}
-	}
 	if logger == nil {
 		logger = slog.Default()
 	}
 
+	// 创建不需要 token 的 core.Client（传入 nil tokenProvider）
+	clientOpts := []core.ClientOption{
+		core.WithLogger(logger),
+	}
+	if httpClient != nil {
+		clientOpts = append(clientOpts, core.WithHTTPClient(httpClient))
+	}
+
 	return &AccessToken{
-		appID:      appID,
-		appSecret:  appSecret,
-		cache:      cache,
-		httpClient: httpClient,
-		logger:     logger,
+		appID:     appID,
+		appSecret: appSecret,
+		cache:     cache,
+		client:    core.NewClient(clientOpts...), // nil tokenProvider
+		logger:    logger,
 	}
 }
 
@@ -92,46 +91,32 @@ func (at *AccessToken) RefreshToken(ctx context.Context) (string, error) {
 		slog.String("appid", at.appID),
 	)
 
-	// 请求微信 API
-	url := fmt.Sprintf(accessTokenURL, at.appID, at.appSecret)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	// 使用 core.Client 请求微信 API
+	body, err := at.client.Request().
+		Path(accessTokenPath).
+		Query("grant_type", "client_credential").
+		Query("appid", at.appID).
+		Query("secret", at.appSecret).
+		WithoutToken(). // 不需要 access_token
+		Get(ctx)
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return "", fmt.Errorf("request access_token: %w", err)
 	}
 
-	resp, err := at.httpClient.Do(req)
+	// 使用 Response 解析，自动处理微信错误
+	resp := NewResponse[accessTokenResponse](body)
+	result, err := resp.Decode()
 	if err != nil {
-		return "", fmt.Errorf("do request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("read response: %w", err)
-	}
-
-	var result accessTokenResponse
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("unmarshal response: %w", err)
-	}
-
-	// 检查错误
-	if result.ErrCode != 0 {
 		at.logger.Error("refresh access_token failed",
 			slog.String("appid", at.appID),
-			slog.Int("errcode", result.ErrCode),
-			slog.String("errmsg", result.ErrMsg),
+			slog.Any("error", err),
 		)
-		return "", core.NewWechatError(result.ErrCode, result.ErrMsg)
+		return "", err
 	}
 
 	// 缓存 token（提前 5 分钟过期，最小缓存 1 秒防止出现负值）
-	ttlSeconds := result.ExpiresIn - tokenExpireBuffer
-	if ttlSeconds < 1 {
-		ttlSeconds = 1
-	}
+	ttlSeconds := max(result.ExpiresIn-tokenExpireBuffer, 1)
 	ttl := time.Duration(ttlSeconds) * time.Second
-
 	if err := at.cache.Set(ctx, cacheKey, result.AccessToken, ttl); err != nil {
 		at.logger.Warn("cache access_token failed",
 			slog.String("appid", at.appID),

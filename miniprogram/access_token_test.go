@@ -22,17 +22,17 @@ func newStubCache() *stubCache {
 	return &stubCache{data: make(map[string]string)}
 }
 
-func (c *stubCache) Get(ctx context.Context, key string) (string, bool) {
+func (c *stubCache) Get(_ context.Context, key string) (string, bool) {
 	v, ok := c.data[key]
 	return v, ok
 }
 
-func (c *stubCache) Set(ctx context.Context, key string, value string, ttl time.Duration) error {
+func (c *stubCache) Set(_ context.Context, key string, value string, _ time.Duration) error {
 	c.data[key] = value
 	return nil
 }
 
-func (c *stubCache) Delete(ctx context.Context, key string) error {
+func (c *stubCache) Delete(_ context.Context, key string) error {
 	delete(c.data, key)
 	return nil
 }
@@ -56,7 +56,7 @@ func TestAccessToken_GetTokenAndRefresh(t *testing.T) {
 	tests := []struct {
 		name             string
 		cacheValue       string
-		serverResponse   accessTokenResponse
+		serverResponse   map[string]any // 使用 map 以支持不同的响应结构
 		wantToken        string
 		wantErrCode      int
 		expectServerHits int
@@ -69,19 +69,18 @@ func TestAccessToken_GetTokenAndRefresh(t *testing.T) {
 		},
 		{
 			name: "refresh success caches token",
-			serverResponse: accessTokenResponse{
-				AccessToken: "fresh_token",
-				ExpiresIn:   7200,
-				ErrCode:     0,
+			serverResponse: map[string]any{
+				"access_token": "fresh_token",
+				"expires_in":   7200,
 			},
 			wantToken:        "fresh_token",
 			expectServerHits: 1,
 		},
 		{
 			name: "wechat error response",
-			serverResponse: accessTokenResponse{
-				ErrCode: core.ErrCodeInvalidToken,
-				ErrMsg:  "invalid token",
+			serverResponse: map[string]any{
+				"errcode": core.ErrCodeInvalidToken,
+				"errmsg":  "invalid token",
 			},
 			wantErrCode:      core.ErrCodeInvalidToken,
 			expectServerHits: 1,

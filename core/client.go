@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"mime/multipart"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -46,6 +46,13 @@ func WithBaseURL(baseURL string) ClientOption {
 	}
 }
 
+// WithTokenProvider 设置 AccessToken 提供器
+func WithTokenProvider(provider AccessTokenProvider) ClientOption {
+	return func(c *Client) {
+		c.tokenProvider = provider
+	}
+}
+
 // WithLogger 设置日志记录器
 func WithLogger(logger *slog.Logger) ClientOption {
 	return func(c *Client) {
@@ -54,14 +61,13 @@ func WithLogger(logger *slog.Logger) ClientOption {
 }
 
 // NewClient 创建 HTTP 客户端
-func NewClient(tokenProvider AccessTokenProvider, opts ...ClientOption) *Client {
+func NewClient(opts ...ClientOption) *Client {
 	c := &Client{
 		httpClient: &http.Client{
 			Timeout: DefaultTimeout,
 		},
-		baseURL:       DefaultBaseURL,
-		tokenProvider: tokenProvider,
-		logger:        slog.Default(),
+		baseURL: DefaultBaseURL,
+		logger:  slog.Default(),
 	}
 
 	for _, opt := range opts {
@@ -71,109 +77,54 @@ func NewClient(tokenProvider AccessTokenProvider, opts ...ClientOption) *Client 
 	return c
 }
 
-// Get 发送 GET 请求
-func (c *Client) Get(ctx context.Context, path string, query map[string]string) ([]byte, error) {
-	return c.doRequest(ctx, http.MethodGet, path, query, nil)
+// Request 创建请求构建器（唯一的对外 API）
+//
+// 示例:
+//
+//	// GET 请求
+//	body, err := client.Request().
+//	    Path("/cgi-bin/user/info").
+//	    Query("openid", "xxx").
+//	    Get(ctx)
+//
+//	// POST 请求
+//	body, err := client.Request().
+//	    Path("/cgi-bin/message/send").
+//	    Body(payload).
+//	    Post(ctx)
+//
+//	// 不带 access_token
+//	body, err := client.Request().
+//	    Path("/sns/jscode2session").
+//	    QueryMap(params).
+//	    WithoutToken().
+//	    Get(ctx)
+func (c *Client) Request() *RequestBuilder {
+	return newRequestBuilder(c)
 }
 
-// PostJSON 发送 POST JSON 请求
-func (c *Client) PostJSON(ctx context.Context, path string, body any) ([]byte, error) {
-	return c.doRequest(ctx, http.MethodPost, path, nil, body)
-}
-
-// PostJSONWithQuery 发送带查询参数的 POST JSON 请求
-func (c *Client) PostJSONWithQuery(ctx context.Context, path string, query map[string]string, body any) ([]byte, error) {
-	return c.doRequest(ctx, http.MethodPost, path, query, body)
-}
-
-// Upload 上传文件
-func (c *Client) Upload(ctx context.Context, path string, fieldName string, fileName string, fileReader io.Reader, extraFields map[string]string) ([]byte, error) {
-	// 获取 access_token
-	token, err := c.tokenProvider.GetToken(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get access token: %w", err)
-	}
-
-	// 构建 URL
-	reqURL, err := c.buildURL(path, map[string]string{"access_token": token})
-	if err != nil {
-		return nil, fmt.Errorf("build url: %w", err)
-	}
-
-	// 构建 multipart body
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-
-	// 添加文件字段
-	part, err := writer.CreateFormFile(fieldName, fileName)
-	if err != nil {
-		return nil, fmt.Errorf("create form file: %w", err)
-	}
-	if _, err := io.Copy(part, fileReader); err != nil {
-		return nil, fmt.Errorf("copy file: %w", err)
-	}
-
-	// 添加额外字段
-	for key, value := range extraFields {
-		if err := writer.WriteField(key, value); err != nil {
-			return nil, fmt.Errorf("write field %s: %w", key, err)
-		}
-	}
-
-	if err := writer.Close(); err != nil {
-		return nil, fmt.Errorf("close writer: %w", err)
-	}
-
-	// 创建请求
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, body)
-	if err != nil {
-		return nil, fmt.Errorf("create request: %w", err)
-	}
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
-	c.logger.Debug("upload request",
-		slog.String("method", http.MethodPost),
-		slog.String("url", reqURL),
-		slog.String("filename", fileName),
-	)
-
-	// 发送请求
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("do request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-
-	c.logger.Debug("upload response",
-		slog.Int("status", resp.StatusCode),
-		slog.String("body", string(respBody)),
-	)
-
-	return respBody, nil
-}
-
-// doRequest 执行 HTTP 请求
-func (c *Client) doRequest(ctx context.Context, method, path string, query map[string]string, body any) ([]byte, error) {
-	// 获取 access_token
-	token, err := c.tokenProvider.GetToken(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("get access token: %w", err)
-	}
-
-	// 复制 query map 并添加 access_token，避免修改调用方的原始 map
+// buildParams 构建参数（包内方法）
+func (c *Client) buildParams(ctx context.Context, query map[string]string, shouldAddAccessToken bool) (map[string]string, error) {
 	params := make(map[string]string, len(query)+1)
-	for k, v := range query {
-		params[k] = v
+	maps.Copy(params, query)
+	if shouldAddAccessToken {
+		// 如果没有 tokenProvider，跳过添加 access_token
+		if c.tokenProvider == nil {
+			return params, nil
+		}
+		token, err := c.tokenProvider.GetToken(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("get access token: %w", err)
+		}
+		params["access_token"] = token
 	}
-	params["access_token"] = token
+	return params, nil
+}
 
+// doRequest 执行 HTTP 请求（包内方法）
+func (c *Client) doRequest(ctx context.Context, method, path string, query map[string]string, body any) ([]byte, error) {
 	// 构建 URL
-	reqURL, err := c.buildURL(path, params)
+	reqURL, err := c.buildURL(path, query)
 	if err != nil {
 		return nil, fmt.Errorf("build url: %w", err)
 	}
@@ -227,7 +178,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, query map[s
 	return respBody, nil
 }
 
-// buildURL 构建完整 URL
+// buildURL 构建完整 URL（包内方法）
 func (c *Client) buildURL(path string, query map[string]string) (string, error) {
 	base, err := url.Parse(c.baseURL)
 	if err != nil {
