@@ -67,15 +67,76 @@ func (mp *MiniProgram) Code2Session(ctx context.Context, req *Code2SessionReques
 		"grant_type": "authorization_code",
 	}
 
-	mp.config.Logger.Debug("code2session request",
+	mp.config.Logger.DebugContext(ctx, "code2session request",
 		"path", Code2SessionPath,
 		"params", params,
 	)
 
-	result := Code2SessionResponse{}
-	err := mp.GetWithoutToken(ctx, Code2SessionPath, params, &result)
+	result := &Code2SessionResponse{}
+	err := mp.GetWithoutToken(ctx, Code2SessionPath, params, result)
 	if err != nil {
 		return nil, err
 	}
-	return &result, nil
+	return result, nil
+}
+
+type GetPhoneNumberRequest struct {
+	// code 是通过 wx.getPhoneNumber 获取到的用户手机号对应的 code
+	Code string `json:"code"`
+}
+
+// GetPhoneNumberResponse 获取用户手机号响应结果
+type GetPhoneNumberResponse struct {
+	// PhoneInfo 用户手机号信息
+	PhoneInfo PhoneInfo `json:"phone_info"`
+}
+
+type PhoneInfo struct {
+	// PhoneNumber 用户手机号
+	PhoneNumber string `json:"phoneNumber"`
+	// PurePhoneNumber 没有区号的手机号
+	PurePhoneNumber string `json:"purePhoneNumber"`
+	//CountryCode 区号
+	CountryCode int `json:"countryCode"`
+	// Watermark 水印
+	Watermark Watermark `json:"watermark"`
+}
+
+type Watermark struct {
+	// AppID 小程序 AppID
+	AppID string `json:"appid"`
+	// Timestamp 获取手机号操作的时间戳
+	Timestamp int64 `json:"timestamp"`
+}
+
+// GetPhoneNumber 该接口用于将code换取用户手机号。 说明，每个code只能使用一次，code的有效期为5min。
+// 接口文档: https://developers.weixin.qq.com/miniprogram/dev/OpenApiDoc/user-info/phone-number/getPhoneNumber.html
+//
+// 参数:
+//   - ctx: 上下文
+//   - GetPhoneNumberRequest : 请求参数
+//
+// 返回:
+//   - *GetPhoneNumberResponse: 响应结果
+//   - error: 可能的错误
+func (mp *MiniProgram) GetPhoneNumber(ctx context.Context, req *GetPhoneNumberRequest) (*GetPhoneNumberResponse, error) {
+	if req.Code == "" {
+		return nil, fmt.Errorf("code is required")
+	}
+
+	params := map[string]string{
+		"code": req.Code,
+	}
+
+	mp.config.Logger.DebugContext(ctx, "get phone number request",
+		"path", "/wxa/business/getuserphonenumber",
+		"params", params,
+	)
+
+	result := &GetPhoneNumberResponse{}
+	err := mp.Post(ctx, "/wxa/business/getuserphonenumber", params, result)
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
