@@ -3,11 +3,25 @@ package utils
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 )
+
+const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+// RandomString 生成指定长度的随机字符串
+func RandomString(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		num, _ := rand.Int(rand.Reader, big.NewInt(int64(len(letterBytes))))
+		b[i] = letterBytes[num.Int64()]
+	}
+	return string(b)
+}
 
 var (
 	// ErrInvalidBlockSize 无效的块大小
