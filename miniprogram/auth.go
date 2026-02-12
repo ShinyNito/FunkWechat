@@ -96,8 +96,8 @@ type PhoneInfo struct {
 	PhoneNumber string `json:"phoneNumber"`
 	// PurePhoneNumber 没有区号的手机号
 	PurePhoneNumber string `json:"purePhoneNumber"`
-	//CountryCode 区号
-	CountryCode int `json:"countryCode"`
+	// CountryCode 区号（兼容 string 和 int 类型，使用时需类型断言）
+	CountryCode any `json:"countryCode"`
 	// Watermark 水印
 	Watermark Watermark `json:"watermark"`
 }
