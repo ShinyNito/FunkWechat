@@ -80,10 +80,11 @@ func TestAESCBCEncryptDecrypt(t *testing.T) {
 func TestDecryptUserData(t *testing.T) {
 	key := []byte("1234567890abcdef")
 	iv := []byte("abcdef1234567890")
-	payload := map[string]any{
-		"nickName": "Alice",
-		"gender":   1,
+	type userData struct {
+		NickName string `json:"nickName"`
+		Gender   int    `json:"gender"`
 	}
+	payload := userData{NickName: "Alice", Gender: 1}
 	raw, err := json.Marshal(payload)
 	require.NoError(t, err)
 
@@ -101,10 +102,10 @@ func TestDecryptUserData(t *testing.T) {
 		iv         string
 		wantError  bool
 		wantNick   string
-		wantGender float64
+		wantGender int
 	}{
 		{
-			name:       "valid decrypt to map",
+			name:       "valid decrypt",
 			sessionKey: sessionKey,
 			encrypted:  encryptedData,
 			iv:         ivStr,
@@ -122,14 +123,14 @@ func TestDecryptUserData(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			data, err := DecryptUserData(tt.sessionKey, tt.encrypted, tt.iv)
+			data, err := DecryptUserData[userData](tt.sessionKey, tt.encrypted, tt.iv)
 			if tt.wantError {
 				assert.Error(t, err)
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tt.wantNick, data["nickName"])
-			assert.Equal(t, tt.wantGender, data["gender"])
+			assert.Equal(t, tt.wantNick, data.NickName)
+			assert.Equal(t, tt.wantGender, data.Gender)
 		})
 	}
 }
@@ -167,13 +168,13 @@ func TestPKCS7Unpad_InvalidPaddingContent(t *testing.T) {
 	assert.True(t, bytes.Equal([]byte{1, 2, 3, 4, 9, 9, 9, 9}, data))
 }
 
-func TestDecryptUserDataTo(t *testing.T) {
+func TestDecryptUserDataWithDifferentStruct(t *testing.T) {
 	key := []byte("1234567890abcdef")
 	iv := []byte("abcdef1234567890")
-	payload := map[string]any{
-		"nickName": "Bob",
-		"gender":   2,
-	}
+	payload := struct {
+		NickName string `json:"nickName"`
+		Gender   int    `json:"gender"`
+	}{NickName: "Bob", Gender: 2}
 	raw, err := json.Marshal(payload)
 	require.NoError(t, err)
 
@@ -184,12 +185,10 @@ func TestDecryptUserDataTo(t *testing.T) {
 	encryptedData := base64.StdEncoding.EncodeToString(ciphertext)
 	ivStr := base64.StdEncoding.EncodeToString(iv)
 
-	var target struct {
+	target, err := DecryptUserData[struct {
 		NickName string `json:"nickName"`
 		Gender   int    `json:"gender"`
-	}
-
-	err = DecryptUserDataTo(sessionKey, encryptedData, ivStr, &target)
+	}](sessionKey, encryptedData, ivStr)
 	require.NoError(t, err)
 	assert.Equal(t, "Bob", target.NickName)
 	assert.Equal(t, 2, target.Gender)

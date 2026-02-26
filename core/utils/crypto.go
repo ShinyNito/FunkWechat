@@ -41,11 +41,26 @@ var (
 	ErrInvalidPKCS7Padding = errors.New("invalid PKCS7 padding")
 )
 
-// DecryptUserData 解密微信用户敏感数据
+// DecryptUserData 解密微信用户敏感数据到目标类型。
 // sessionKey: 用户会话密钥（Base64 编码）
 // encryptedData: 加密数据（Base64 编码）
 // iv: 初始向量（Base64 编码）
-func DecryptUserData(sessionKey, encryptedData, iv string) (map[string]any, error) {
+func DecryptUserData[T any](sessionKey, encryptedData, iv string) (T, error) {
+	var zero T
+
+	decrypted, err := decryptUserDataPlaintext(sessionKey, encryptedData, iv)
+	if err != nil {
+		return zero, err
+	}
+
+	var result T
+	if err := json.Unmarshal(decrypted, &result); err != nil {
+		return zero, fmt.Errorf("unmarshal json: %w", err)
+	}
+	return result, nil
+}
+
+func decryptUserDataPlaintext(sessionKey, encryptedData, iv string) ([]byte, error) {
 	// Base64 解码
 	keyBytes, err := base64.StdEncoding.DecodeString(sessionKey)
 	if err != nil {
@@ -68,45 +83,7 @@ func DecryptUserData(sessionKey, encryptedData, iv string) (map[string]any, erro
 		return nil, fmt.Errorf("aes decrypt: %w", err)
 	}
 
-	// 解析 JSON
-	var result map[string]any
-	if err := json.Unmarshal(decrypted, &result); err != nil {
-		return nil, fmt.Errorf("unmarshal json: %w", err)
-	}
-
-	return result, nil
-}
-
-// DecryptUserDataTo 解密微信用户敏感数据到指定结构体
-func DecryptUserDataTo(sessionKey, encryptedData, iv string, v any) error {
-	// Base64 解码
-	keyBytes, err := base64.StdEncoding.DecodeString(sessionKey)
-	if err != nil {
-		return fmt.Errorf("decode session key: %w", err)
-	}
-
-	dataBytes, err := base64.StdEncoding.DecodeString(encryptedData)
-	if err != nil {
-		return fmt.Errorf("decode encrypted data: %w", err)
-	}
-
-	ivBytes, err := base64.StdEncoding.DecodeString(iv)
-	if err != nil {
-		return fmt.Errorf("decode iv: %w", err)
-	}
-
-	// AES-CBC 解密
-	decrypted, err := AESCBCDecrypt(dataBytes, keyBytes, ivBytes)
-	if err != nil {
-		return fmt.Errorf("aes decrypt: %w", err)
-	}
-
-	// 解析 JSON
-	if err := json.Unmarshal(decrypted, v); err != nil {
-		return fmt.Errorf("unmarshal json: %w", err)
-	}
-
-	return nil
+	return decrypted, nil
 }
 
 // AESCBCDecrypt AES-CBC 解密

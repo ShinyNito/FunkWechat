@@ -1,148 +1,95 @@
 package miniprogram
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
-
-	"github.com/ShinyNito/FunkWechat/core"
 )
 
-const (
-	// Code2SessionURL code2session 接口地址
-	Code2SessionPath = "/sns/jscode2session"
-)
+const Code2SessionPath = "/sns/jscode2session"
 
-// Code2SessionRequest code2session 请求参数
 type Code2SessionRequest struct {
-	// JSCode 登录时获取的 code，可通过 wx.login 获取
 	JSCode string
 }
 
-// Code2SessionResponse code2session 响应结果
 type Code2SessionResponse struct {
-	// OpenID 用户唯一标识
-	OpenID string `json:"openid"`
-	// SessionKey 会话密钥
+	OpenID     string `json:"openid"`
 	SessionKey string `json:"session_key"`
-	// UnionID 用户在开放平台的唯一标识符
-	// 若当前小程序已绑定到微信开放平台帐号下会返回
-	UnionID string `json:"unionid,omitempty"`
-}
-
-// Code2Session 通过登录凭证 code 获取 session_key 和 openid
-// 接口文档: https://developers.weixin.qq.com/miniprogram/dev/OpenApiDoc/user-login/code2Session.html
-//
-// 参数:
-//   - ctx: 上下文
-//   - req: 请求参数，包含 JSCode
-//
-// 返回:
-//   - *Code2SessionResponse: 响应结果，包含 openid, session_key, unionid 等
-//   - error: 可能的错误
-//
-// 错误:
-//   - 40029: code 无效（js_code 无效）
-//   - 45011: API 调用太频繁，请稍候再试
-//   - 40226: code 被封禁（高风险等级用户，小程序登录拦截）
-//   - -1: 系统繁忙，此时请开发者稍候再试
-//
-// 示例:
-//
-//	resp, err := mp.Code2Session(ctx, &miniprogram.Code2SessionRequest{
-//	    JSCode: "081aBZ000X0pJt1WjY200zWDKK1aBZ0J",
-//	})
-//	if err != nil {
-//	    // 处理错误（包括微信 API 错误）
-//	    return err
-//	}
-func (mp *MiniProgram) Code2Session(ctx context.Context, req *Code2SessionRequest) (*Code2SessionResponse, error) {
-	if req == nil {
-		return nil, fmt.Errorf("code2session request is nil")
-	}
-	if req.JSCode == "" {
-		return nil, fmt.Errorf("js_code is required")
-	}
-
-	params := map[string]string{
-		"appid":      mp.config.AppID,
-		"secret":     mp.config.AppSecret,
-		"js_code":    req.JSCode,
-		"grant_type": "authorization_code",
-	}
-
-	mp.config.Logger.DebugContext(ctx, "code2session request",
-		"path", Code2SessionPath,
-		"params", core.RedactQueryMap(params),
-	)
-
-	result := &Code2SessionResponse{}
-	err := mp.GetWithoutToken(ctx, Code2SessionPath, params, result)
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
+	UnionID    string `json:"unionid,omitempty"`
 }
 
 type GetPhoneNumberRequest struct {
-	// code 是通过 wx.getPhoneNumber 获取到的用户手机号对应的 code
 	Code string `json:"code"`
 }
 
-// GetPhoneNumberResponse 获取用户手机号响应结果
 type GetPhoneNumberResponse struct {
-	// PhoneInfo 用户手机号信息
 	PhoneInfo PhoneInfo `json:"phone_info"`
 }
 
 type PhoneInfo struct {
-	// PhoneNumber 用户手机号
-	PhoneNumber string `json:"phoneNumber"`
-	// PurePhoneNumber 没有区号的手机号
-	PurePhoneNumber string `json:"purePhoneNumber"`
-	// CountryCode 区号（兼容 string 和 int 类型，使用时需类型断言）
-	CountryCode any `json:"countryCode"`
-	// Watermark 水印
-	Watermark Watermark `json:"watermark"`
+	PhoneNumber     string      `json:"phoneNumber"`
+	PurePhoneNumber string      `json:"purePhoneNumber"`
+	CountryCode     CountryCode `json:"countryCode"`
+	Watermark       Watermark   `json:"watermark"`
+}
+
+type CountryCode string
+
+func (c *CountryCode) UnmarshalJSON(data []byte) error {
+	if c == nil {
+		return fmt.Errorf("countryCode target is nil")
+	}
+
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
+		*c = ""
+		return nil
+	}
+
+	var s string
+	if err := json.Unmarshal(trimmed, &s); err == nil {
+		*c = CountryCode(s)
+		return nil
+	}
+
+	var n json.Number
+	if err := json.Unmarshal(trimmed, &n); err == nil {
+		*c = CountryCode(n.String())
+		return nil
+	}
+
+	return fmt.Errorf("invalid countryCode: %s", string(trimmed))
 }
 
 type Watermark struct {
-	// AppID 小程序 AppID
-	AppID string `json:"appid"`
-	// Timestamp 获取手机号操作的时间戳
-	Timestamp int64 `json:"timestamp"`
+	AppID     string `json:"appid"`
+	Timestamp int64  `json:"timestamp"`
 }
 
-// GetPhoneNumber 该接口用于将code换取用户手机号。 说明，每个code只能使用一次，code的有效期为5min。
-// 接口文档: https://developers.weixin.qq.com/miniprogram/dev/OpenApiDoc/user-info/phone-number/getPhoneNumber.html
-//
-// 参数:
-//   - ctx: 上下文
-//   - GetPhoneNumberRequest : 请求参数
-//
-// 返回:
-//   - *GetPhoneNumberResponse: 响应结果
-//   - error: 可能的错误
-func (mp *MiniProgram) GetPhoneNumber(ctx context.Context, req *GetPhoneNumberRequest) (*GetPhoneNumberResponse, error) {
-	if req == nil {
-		return nil, fmt.Errorf("get phone number request is nil")
+func (c *Client) Code2Session(ctx context.Context, req Code2SessionRequest) (Code2SessionResponse, error) {
+	if req.JSCode == "" {
+		return Code2SessionResponse{}, fmt.Errorf("js_code is required")
 	}
+
+	return Request[Code2SessionResponse](c).
+		Path(Code2SessionPath).
+		Query("appid", c.cfg.AppID).
+		Query("secret", c.cfg.AppSecret).
+		Query("js_code", req.JSCode).
+		Query("grant_type", "authorization_code").
+		WithoutToken().
+		Get(ctx)
+}
+
+func (c *Client) GetPhoneNumber(ctx context.Context, req GetPhoneNumberRequest) (GetPhoneNumberResponse, error) {
 	if req.Code == "" {
-		return nil, fmt.Errorf("code is required")
+		return GetPhoneNumberResponse{}, fmt.Errorf("code is required")
 	}
 
-	params := map[string]string{
-		"code": req.Code,
-	}
-
-	mp.config.Logger.DebugContext(ctx, "get phone number request",
-		"path", "/wxa/business/getuserphonenumber",
-		"params", core.RedactQueryMap(params),
-	)
-
-	result := &GetPhoneNumberResponse{}
-	err := mp.Post(ctx, "/wxa/business/getuserphonenumber", params, result)
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
+	payload := map[string]string{"code": req.Code}
+	return Request[GetPhoneNumberResponse](c).
+		Path("/wxa/business/getuserphonenumber").
+		Body(payload).
+		Post(ctx)
 }
