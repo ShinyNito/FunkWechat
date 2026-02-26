@@ -15,7 +15,7 @@ FunkWechat v2
 安装
 ----
 ```bash
-go get github.com/ShinyNito/FunkWechat
+go get github.com/ShinyNito/FunkWechat/v2
 ```
 
 小程序示例
@@ -27,7 +27,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ShinyNito/FunkWechat/miniprogram"
+	"github.com/ShinyNito/FunkWechat/v2/miniprogram"
 )
 
 func main() {
@@ -70,7 +70,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ShinyNito/FunkWechat/officialaccount"
+		"github.com/ShinyNito/FunkWechat/v2/officialaccount"
 )
 
 func main() {

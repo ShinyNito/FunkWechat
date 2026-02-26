@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ShinyNito/FunkWechat/core"
+	"github.com/ShinyNito/FunkWechat/v2/core"
 )
 
 const (

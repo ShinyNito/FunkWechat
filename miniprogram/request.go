@@ -1,6 +1,6 @@
 package miniprogram
 
-import "github.com/ShinyNito/FunkWechat/core"
+import "github.com/ShinyNito/FunkWechat/v2/core"
 
 type TypedRequest[T any] = core.TypedRequest[T]
 

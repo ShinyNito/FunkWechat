@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ShinyNito/FunkWechat/core/utils"
+	"github.com/ShinyNito/FunkWechat/v2/core/utils"
 )
 
 type JssdkSignRequest struct {
