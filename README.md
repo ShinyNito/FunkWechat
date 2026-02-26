@@ -13,14 +13,20 @@ FunkWechat
 快速开始
 --------
 ```go
-mp := miniprogram.New(&miniprogram.Config{
+mp, err := miniprogram.New(&miniprogram.Config{
     AppID:     "<your-appid>",
     AppSecret: "<your-secret>",
     Cache:     core.NewMemoryCache(), // 可替换为自定义实现
 })
+if err != nil {
+    // handle invalid config
+}
 
 client := mp.GetClient()
-resp, err := client.Get(context.Background(), "/cgi-bin/token", nil)
+resp, err := client.Request().
+    Path("/cgi-bin/token").
+    Query("grant_type", "client_credential").
+    Get(context.Background())
 if err != nil {
     // handle error
 }

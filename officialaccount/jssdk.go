@@ -79,7 +79,10 @@ func (oa *OfficialAccount) GetJssdkSign(ctx context.Context, req *JssdkSignReque
 	}
 
 	// 2. 生成随机字符串
-	nonceStr := utils.RandomString(16)
+	nonceStr, err := utils.RandomString(16)
+	if err != nil {
+		return nil, fmt.Errorf("generate nonce: %w", err)
+	}
 
 	// 3. 获取当前时间戳（秒）
 	timestamp := time.Now().Unix()

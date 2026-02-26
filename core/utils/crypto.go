@@ -14,18 +14,27 @@ import (
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 // RandomString 生成指定长度的随机字符串
-func RandomString(n int) string {
+func RandomString(n int) (string, error) {
+	if n < 0 {
+		return "", fmt.Errorf("length must be non-negative")
+	}
+
 	b := make([]byte, n)
 	for i := range b {
-		num, _ := rand.Int(rand.Reader, big.NewInt(int64(len(letterBytes))))
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(letterBytes))))
+		if err != nil {
+			return "", fmt.Errorf("generate random int: %w", err)
+		}
 		b[i] = letterBytes[num.Int64()]
 	}
-	return string(b)
+	return string(b), nil
 }
 
 var (
 	// ErrInvalidBlockSize 无效的块大小
 	ErrInvalidBlockSize = errors.New("invalid block size")
+	// ErrInvalidIVSize 无效的 IV 长度
+	ErrInvalidIVSize = errors.New("invalid iv size")
 	// ErrInvalidPKCS7Data 无效的 PKCS7 数据
 	ErrInvalidPKCS7Data = errors.New("invalid PKCS7 data")
 	// ErrInvalidPKCS7Padding 无效的 PKCS7 填充
@@ -106,6 +115,9 @@ func AESCBCDecrypt(ciphertext, key, iv []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("new cipher: %w", err)
 	}
+	if len(iv) != aes.BlockSize {
+		return nil, ErrInvalidIVSize
+	}
 
 	if len(ciphertext) < aes.BlockSize {
 		return nil, ErrInvalidBlockSize
@@ -133,6 +145,9 @@ func AESCBCEncrypt(plaintext, key, iv []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("new cipher: %w", err)
+	}
+	if len(iv) != aes.BlockSize {
+		return nil, ErrInvalidIVSize
 	}
 
 	// PKCS7 填充
@@ -171,7 +186,7 @@ func PKCS7Unpad(data []byte, blockSize int) ([]byte, error) {
 		return nil, ErrInvalidPKCS7Padding
 	}
 
-	for i := 0; i < padding; i++ {
+	for i := range padding {
 		if data[length-1-i] != byte(padding) {
 			return nil, ErrInvalidPKCS7Padding
 		}

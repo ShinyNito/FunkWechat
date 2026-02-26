@@ -3,6 +3,8 @@ package miniprogram
 import (
 	"context"
 	"fmt"
+
+	"github.com/ShinyNito/FunkWechat/core"
 )
 
 const (
@@ -53,9 +55,10 @@ type Code2SessionResponse struct {
 //	    // 处理错误（包括微信 API 错误）
 //	    return err
 //	}
-//	fmt.Println("OpenID:", resp.OpenID)
-//	fmt.Println("SessionKey:", resp.SessionKey)
 func (mp *MiniProgram) Code2Session(ctx context.Context, req *Code2SessionRequest) (*Code2SessionResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("code2session request is nil")
+	}
 	if req.JSCode == "" {
 		return nil, fmt.Errorf("js_code is required")
 	}
@@ -69,7 +72,7 @@ func (mp *MiniProgram) Code2Session(ctx context.Context, req *Code2SessionReques
 
 	mp.config.Logger.DebugContext(ctx, "code2session request",
 		"path", Code2SessionPath,
-		"params", params,
+		"params", core.RedactQueryMap(params),
 	)
 
 	result := &Code2SessionResponse{}
@@ -120,6 +123,9 @@ type Watermark struct {
 //   - *GetPhoneNumberResponse: 响应结果
 //   - error: 可能的错误
 func (mp *MiniProgram) GetPhoneNumber(ctx context.Context, req *GetPhoneNumberRequest) (*GetPhoneNumberResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("get phone number request is nil")
+	}
 	if req.Code == "" {
 		return nil, fmt.Errorf("code is required")
 	}
@@ -130,7 +136,7 @@ func (mp *MiniProgram) GetPhoneNumber(ctx context.Context, req *GetPhoneNumberRe
 
 	mp.config.Logger.DebugContext(ctx, "get phone number request",
 		"path", "/wxa/business/getuserphonenumber",
-		"params", params,
+		"params", core.RedactQueryMap(params),
 	)
 
 	result := &GetPhoneNumberResponse{}

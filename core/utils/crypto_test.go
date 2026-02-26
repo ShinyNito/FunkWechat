@@ -95,13 +95,13 @@ func TestDecryptUserData(t *testing.T) {
 	ivStr := base64.StdEncoding.EncodeToString(iv)
 
 	tests := []struct {
-		name        string
-		sessionKey  string
-		encrypted   string
-		iv          string
-		wantError   bool
-		wantNick    string
-		wantGender  float64
+		name       string
+		sessionKey string
+		encrypted  string
+		iv         string
+		wantError  bool
+		wantNick   string
+		wantGender float64
 	}{
 		{
 			name:       "valid decrypt to map",
@@ -139,6 +139,19 @@ func TestAESCBCDecrypt_InvalidBlockSize(t *testing.T) {
 	iv := []byte("abcdef1234567890")
 	_, err := AESCBCDecrypt([]byte("short"), key, iv)
 	assert.ErrorIs(t, err, ErrInvalidBlockSize)
+}
+
+func TestAESCBC_InvalidIVSize(t *testing.T) {
+	key := []byte("1234567890abcdef")
+	plaintext := []byte("secret")
+	ciphertext := []byte("1234567890abcdef")
+	invalidIV := []byte("short")
+
+	_, err := AESCBCEncrypt(plaintext, key, invalidIV)
+	assert.ErrorIs(t, err, ErrInvalidIVSize)
+
+	_, err = AESCBCDecrypt(ciphertext, key, invalidIV)
+	assert.ErrorIs(t, err, ErrInvalidIVSize)
 }
 
 func TestPKCS7Unpad_InvalidPaddingContent(t *testing.T) {
@@ -180,4 +193,14 @@ func TestDecryptUserDataTo(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Bob", target.NickName)
 	assert.Equal(t, 2, target.Gender)
+}
+
+func TestRandomString(t *testing.T) {
+	s, err := RandomString(16)
+	require.NoError(t, err)
+	assert.Len(t, s, 16)
+
+	_, err = RandomString(-1)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "non-negative")
 }

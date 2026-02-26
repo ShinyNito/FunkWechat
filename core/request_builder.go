@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"mime/multipart"
 	"net/http"
 )
@@ -55,9 +56,7 @@ func (b *RequestBuilder) QueryMap(query map[string]string) *RequestBuilder {
 	if b.query == nil {
 		b.query = make(map[string]string)
 	}
-	for k, v := range query {
-		b.query[k] = v
-	}
+	maps.Copy(b.query, query)
 	return b
 }
 
@@ -177,9 +176,9 @@ func (b *RequestBuilder) doUpload(ctx context.Context) ([]byte, error) {
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	b.client.logger.Debug("upload request",
+	b.client.logger.DebugContext(ctx, "upload request",
 		slog.String("method", http.MethodPost),
-		slog.String("url", reqURL),
+		slog.String("url", RedactURLQuery(reqURL)),
 		slog.String("filename", b.uploadFileName),
 	)
 

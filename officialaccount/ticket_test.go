@@ -112,7 +112,7 @@ func TestOfficialAccount_GetTicket(t *testing.T) {
 				cache.Set(context.Background(), cacheKey, tt.cacheValue, 0)
 			}
 
-			oa := New(&Config{
+			oa, err := New(&Config{
 				AppID:     "test_appid",
 				AppSecret: "test_secret",
 				Cache:     cache,
@@ -120,6 +120,7 @@ func TestOfficialAccount_GetTicket(t *testing.T) {
 					Transport: &rewriteTransport{target: targetURL},
 				},
 			})
+			require.NoError(t, err)
 
 			resp, err := oa.GetTicket(context.Background(), tt.req)
 

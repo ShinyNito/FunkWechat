@@ -155,7 +155,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, query map[s
 
 	c.logger.Debug("http request",
 		slog.String("method", method),
-		slog.String("url", reqURL),
+		slog.String("url", RedactURLQuery(reqURL)),
 	)
 
 	// 发送请求

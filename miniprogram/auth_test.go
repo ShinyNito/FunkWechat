@@ -99,12 +99,13 @@ func TestMiniProgram_Code2Session(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// 如果 JSCode 为空，不需要启动服务器
 			if tt.req.JSCode == "" {
-				mp := New(&Config{
+				mp, err := New(&Config{
 					AppID:     "test_appid",
 					AppSecret: "test_secret",
 				})
+				require.NoError(t, err)
 
-				_, err := mp.Code2Session(context.Background(), tt.req)
+				_, err = mp.Code2Session(context.Background(), tt.req)
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), "js_code is required")
 				return
@@ -137,13 +138,14 @@ func TestMiniProgram_Code2Session(t *testing.T) {
 			// 重定向请求到测试服务器
 			targetURL, _ := url.Parse(server.URL)
 
-			mp := New(&Config{
+			mp, err := New(&Config{
 				AppID:     "test_appid",
 				AppSecret: "test_secret",
 				HTTPClient: &http.Client{
 					Transport: &rewriteTransport{target: targetURL},
 				},
 			})
+			require.NoError(t, err)
 
 			// 执行测试
 			resp, err := mp.Code2Session(context.Background(), tt.req)
@@ -191,16 +193,17 @@ func TestCode2SessionRequest_Validation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mp := New(&Config{
+			mp, err := New(&Config{
 				AppID:     "test_appid",
 				AppSecret: "test_secret",
 			})
+			require.NoError(t, err)
 
 			req := &Code2SessionRequest{
 				JSCode: tt.jsCode,
 			}
 
-			_, err := mp.Code2Session(context.Background(), req)
+			_, err = mp.Code2Session(context.Background(), req)
 
 			if tt.wantErr {
 				assert.Error(t, err)

@@ -2,6 +2,7 @@ package officialaccount
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sync"
@@ -32,7 +33,11 @@ type OfficialAccount struct {
 }
 
 // New 创建公众号实例
-func New(cfg *Config) *OfficialAccount {
+func New(cfg *Config) (*OfficialAccount, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid officialaccount config: %w", err)
+	}
+
 	// 默认缓存
 	if cfg.Cache == nil {
 		cfg.Cache = core.NewMemoryCache()
@@ -68,7 +73,7 @@ func New(cfg *Config) *OfficialAccount {
 		config:      cfg,
 		accessToken: accessToken,
 		client:      client,
-	}
+	}, nil
 }
 
 // GetClient 获取 HTTP 客户端
@@ -88,6 +93,10 @@ func (oa *OfficialAccount) GetConfig() *Config {
 
 // Get 发送 GET 请求并解析响应到 result（带 access_token）
 func (oa *OfficialAccount) Get(ctx context.Context, path string, query map[string]string, result any) error {
+	if err := validateDecodeTarget(result); err != nil {
+		return fmt.Errorf("invalid get result: %w", err)
+	}
+
 	body, err := oa.client.Request().
 		Path(path).
 		QueryMap(query).
@@ -106,6 +115,10 @@ func (oa *OfficialAccount) Get(ctx context.Context, path string, query map[strin
 
 // GetWithoutToken 发送 GET 请求（不带 access_token）并解析响应到 result
 func (oa *OfficialAccount) GetWithoutToken(ctx context.Context, path string, query map[string]string, result any) error {
+	if err := validateDecodeTarget(result); err != nil {
+		return fmt.Errorf("invalid get result: %w", err)
+	}
+
 	body, err := oa.client.Request().
 		Path(path).
 		QueryMap(query).
@@ -125,6 +138,10 @@ func (oa *OfficialAccount) GetWithoutToken(ctx context.Context, path string, que
 
 // Post 发送 POST 请求并解析响应到 result（带 access_token）
 func (oa *OfficialAccount) Post(ctx context.Context, path string, reqBody any, result any) error {
+	if err := validateDecodeTarget(result); err != nil {
+		return fmt.Errorf("invalid post result: %w", err)
+	}
+
 	body, err := oa.client.Request().
 		Path(path).
 		Body(reqBody).

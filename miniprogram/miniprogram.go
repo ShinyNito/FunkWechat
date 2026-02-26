@@ -2,6 +2,7 @@ package miniprogram
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -30,7 +31,11 @@ type MiniProgram struct {
 }
 
 // New 创建小程序实例
-func New(cfg *Config) *MiniProgram {
+func New(cfg *Config) (*MiniProgram, error) {
+	if err := cfg.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid miniprogram config: %w", err)
+	}
+
 	// 默认缓存
 	if cfg.Cache == nil {
 		cfg.Cache = core.NewMemoryCache()
@@ -66,7 +71,7 @@ func New(cfg *Config) *MiniProgram {
 		config:      cfg,
 		accessToken: accessToken,
 		client:      client,
-	}
+	}, nil
 }
 
 // GetClient 获取 HTTP 客户端
@@ -102,6 +107,10 @@ func (mp *MiniProgram) GetConfig() *Config {
 //	    "openid": "xxx",
 //	}, &userInfo)
 func (mp *MiniProgram) Get(ctx context.Context, path string, query map[string]string, result any) error {
+	if err := validateDecodeTarget(result); err != nil {
+		return fmt.Errorf("invalid get result: %w", err)
+	}
+
 	body, err := mp.client.Request().
 		Path(path).
 		QueryMap(query).
@@ -120,6 +129,10 @@ func (mp *MiniProgram) Get(ctx context.Context, path string, query map[string]st
 
 // GetWithoutToken 发送 GET 请求（不带 access_token）并解析响应到 result
 func (mp *MiniProgram) GetWithoutToken(ctx context.Context, path string, query map[string]string, result any) error {
+	if err := validateDecodeTarget(result); err != nil {
+		return fmt.Errorf("invalid get result: %w", err)
+	}
+
 	body, err := mp.client.Request().
 		Path(path).
 		QueryMap(query).
@@ -155,6 +168,10 @@ func (mp *MiniProgram) GetWithoutToken(ctx context.Context, path string, query m
 //	    "text": map[string]string{"content": "Hello"},
 //	}, &result)
 func (mp *MiniProgram) Post(ctx context.Context, path string, reqBody any, result any) error {
+	if err := validateDecodeTarget(result); err != nil {
+		return fmt.Errorf("invalid post result: %w", err)
+	}
+
 	body, err := mp.client.Request().
 		Path(path).
 		Body(reqBody).
@@ -173,6 +190,10 @@ func (mp *MiniProgram) Post(ctx context.Context, path string, reqBody any, resul
 
 // PostWithQuery 发送带查询参数的 POST 请求（带 access_token）并解析响应到 result
 func (mp *MiniProgram) PostWithQuery(ctx context.Context, path string, query map[string]string, reqBody any, result any) error {
+	if err := validateDecodeTarget(result); err != nil {
+		return fmt.Errorf("invalid post result: %w", err)
+	}
+
 	body, err := mp.client.Request().
 		Path(path).
 		QueryMap(query).

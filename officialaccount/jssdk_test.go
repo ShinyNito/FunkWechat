@@ -65,7 +65,7 @@ func TestOfficialAccount_GetJssdkSign(t *testing.T) {
 			cache := newStubCache()
 			cache.Set(context.Background(), accessTokenCacheKeyPrefix+"test_appid", "test_access_token", 0)
 
-			oa := New(&Config{
+			oa, err := New(&Config{
 				AppID:     "test_appid",
 				AppSecret: "test_secret",
 				Cache:     cache,
@@ -73,6 +73,7 @@ func TestOfficialAccount_GetJssdkSign(t *testing.T) {
 					Transport: &rewriteTransport{target: targetURL},
 				},
 			})
+			require.NoError(t, err)
 
 			resp, err := oa.GetJssdkSign(context.Background(), tt.req)
 
@@ -102,11 +103,12 @@ func TestSign(t *testing.T) {
 	// 使用官方文档的测试用例验证签名算法
 	// 参考: https://developers.weixin.qq.com/doc/offiaccount/OA_Web_Apps/JS-SDK.html
 	cache := newStubCache()
-	oa := New(&Config{
+	oa, err := New(&Config{
 		AppID:     "test_appid",
 		AppSecret: "test_secret",
 		Cache:     cache,
 	})
+	require.NoError(t, err)
 
 	ticket := "sM4AOVdWfPE4DxkXGEs8VMCPGGVi4C3VM0P37wVUCFvkVAy_90u5h9nbSlYy3-Sl-HhTdfl2fzFy1AOcHKP7qg"
 	nonceStr := "Wm3WZYTPz0wzccnW"

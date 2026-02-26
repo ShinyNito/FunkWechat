@@ -1,6 +1,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -44,7 +45,7 @@ const (
 
 // IsTokenError 判断是否为 token 相关错误（需要刷新 token）
 func IsTokenError(err error) bool {
-	if we, ok := err.(*WechatError); ok {
+	if we, ok := errors.AsType[*WechatError](err); ok {
 		return we.ErrCode == ErrCodeInvalidToken || we.ErrCode == ErrCodeExpiredToken
 	}
 	return false

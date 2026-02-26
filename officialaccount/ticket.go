@@ -60,8 +60,11 @@ type GetTicketResponse struct {
 //	if err != nil {
 //	    return err
 //	}
-//	fmt.Println("Ticket:", resp.Ticket)
 func (oa *OfficialAccount) GetTicket(ctx context.Context, req *GetTicketRequest) (*GetTicketResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("get ticket request is nil")
+	}
+
 	ticketType := req.Type
 	if ticketType == "" {
 		ticketType = TicketTypeJSAPI
