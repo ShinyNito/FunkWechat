@@ -209,7 +209,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(ticket.Ticket)
+	fmt.Println(ticket)
 
 	sign, err := client.GetJssdkSign(context.Background(), officialaccount.JssdkSignRequest{
 		URL: "https://example.com/page#hash",

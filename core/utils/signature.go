@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"sort"
 	"strings"
@@ -42,7 +43,7 @@ func HMACSHA256(data, key string) string {
 // token: 开发者配置的 Token
 func VerifySignature(signature, timestamp, nonce, token string) bool {
 	computed := SHA1Sign(token, timestamp, nonce)
-	return computed == signature
+	return subtle.ConstantTimeCompare([]byte(computed), []byte(signature)) == 1
 }
 
 // VerifyMsgSignature 验证消息签名（加密消息模式）
@@ -53,5 +54,5 @@ func VerifySignature(signature, timestamp, nonce, token string) bool {
 // encryptedMsg: 加密的消息体
 func VerifyMsgSignature(msgSignature, timestamp, nonce, token, encryptedMsg string) bool {
 	computed := SHA1Sign(token, timestamp, nonce, encryptedMsg)
-	return computed == msgSignature
+	return subtle.ConstantTimeCompare([]byte(computed), []byte(msgSignature)) == 1
 }

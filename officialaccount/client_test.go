@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
+
+	"github.com/ShinyNito/FunkWechat/v2/core"
 )
 
 func TestNewValidation(t *testing.T) {
@@ -49,21 +52,21 @@ func TestGetTicket(t *testing.T) {
 		t.Fatalf("new client: %v", err)
 	}
 
-	resp, err := client.GetTicket(context.Background(), GetTicketRequest{Type: TicketTypeJSAPI})
+	ticket, err := client.GetTicket(context.Background(), GetTicketRequest{Type: TicketTypeJSAPI})
 	if err != nil {
 		t.Fatalf("get ticket: %v", err)
 	}
-	if resp.Ticket != "ticket-1" {
-		t.Fatalf("unexpected ticket: %s", resp.Ticket)
+	if ticket != "ticket-1" {
+		t.Fatalf("unexpected ticket: %s", ticket)
 	}
 
 	// cache hit
-	resp, err = client.GetTicket(context.Background(), GetTicketRequest{Type: TicketTypeJSAPI})
+	ticket, err = client.GetTicket(context.Background(), GetTicketRequest{Type: TicketTypeJSAPI})
 	if err != nil {
 		t.Fatalf("get ticket from cache: %v", err)
 	}
-	if resp.Ticket != "ticket-1" {
-		t.Fatalf("unexpected cached ticket: %s", resp.Ticket)
+	if ticket != "ticket-1" {
+		t.Fatalf("unexpected cached ticket: %s", ticket)
 	}
 	if tokenCalls != 1 {
 		t.Fatalf("expected 1 token call, got %d", tokenCalls)
@@ -133,5 +136,61 @@ func TestTypedRequest(t *testing.T) {
 	}
 	if resp.MsgID != 123 {
 		t.Fatalf("unexpected msgid: %d", resp.MsgID)
+	}
+}
+
+func TestGetTicket_InvalidCachedValueWillRefresh(t *testing.T) {
+	cache := core.NewMemoryCache()
+	tokenCalls := 0
+	ticketCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case accessTokenPath:
+			tokenCalls++
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"access_token": "token-2",
+				"expires_in":   7200,
+			})
+		case getTicketPath:
+			ticketCalls++
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"errcode":    0,
+				"errmsg":     "ok",
+				"ticket":     "ticket-2",
+				"expires_in": 7200,
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client, err := New(Config{
+		AppID:     "appid",
+		AppSecret: "secret",
+		Cache:     cache,
+		BaseURL:   server.URL,
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+
+	cacheKey := client.ticketCacheKey(TicketTypeJSAPI)
+	if err := cache.Set(context.Background(), cacheKey, "legacy-ticket", time.Minute); err != nil {
+		t.Fatalf("set cache: %v", err)
+	}
+
+	ticket, err := client.GetTicket(context.Background(), GetTicketRequest{Type: TicketTypeJSAPI})
+	if err != nil {
+		t.Fatalf("get ticket with invalid cache: %v", err)
+	}
+	if ticket != "ticket-2" {
+		t.Fatalf("unexpected refreshed ticket: %s", ticket)
+	}
+	if tokenCalls != 1 {
+		t.Fatalf("expected 1 token call, got %d", tokenCalls)
+	}
+	if ticketCalls != 1 {
+		t.Fatalf("expected 1 ticket call, got %d", ticketCalls)
 	}
 }
