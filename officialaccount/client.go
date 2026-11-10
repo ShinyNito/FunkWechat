@@ -33,6 +33,11 @@ func New(cfg Config) (*Client, error) {
 	}, nil
 }
 
+// Request 创建请求，用于调用未封装的接口。
+func (c *Client) Request(path string) *core.Request {
+	return c.apiClient.Request(path)
+}
+
 func (c *Client) Config() Config {
 	return c.cfg
 }

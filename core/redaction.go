@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -24,26 +25,8 @@ var sensitiveKeys = map[string]struct{}{
 	"token":         {},
 }
 
-// RedactQueryMap 脱敏查询参数，返回拷贝，原 map 不会被修改。
-func RedactQueryMap(query map[string]string) map[string]string {
-	if query == nil {
-		return nil
-	}
-
-	out := make(map[string]string, len(query))
-	for key, value := range query {
-		if isSensitiveKey(key) {
-			out[key] = redactedValue
-			continue
-		}
-		out[key] = value
-	}
-
-	return out
-}
-
-// RedactURLQuery 脱敏 URL 查询参数中的敏感字段。
-func RedactURLQuery(rawURL string) string {
+// redactURL 脱敏 URL 查询参数中的敏感字段。
+func redactURL(rawURL string) string {
 	parsed, err := url.Parse(rawURL)
 	if err != nil || parsed.RawQuery == "" {
 		return rawURL
@@ -64,9 +47,17 @@ func RedactURLQuery(rawURL string) string {
 	return parsed.String()
 }
 
-// RedactJSONBody 脱敏 JSON 请求体或响应体中的敏感字段，用于日志输出。
-// 嵌套对象和数组中的同名字段也会被脱敏；无法解析为 JSON 的内容只输出长度。
-func RedactJSONBody(body []byte) string {
+// redactURLError 脱敏 *url.Error 中的 URL，保留错误链，超时等判断不受影响。
+func redactURLError(err error) error {
+	if urlErr, ok := errors.AsType[*url.Error](err); ok {
+		urlErr.URL = redactURL(urlErr.URL)
+	}
+	return err
+}
+
+// redactBody 脱敏 JSON 请求体或响应体中的敏感字段，用于日志输出。
+// 嵌套对象和数组中的同名字段也会被脱敏；multipart、图片等非 JSON 内容只输出长度。
+func redactBody(body []byte) string {
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.UseNumber()
 	var value any

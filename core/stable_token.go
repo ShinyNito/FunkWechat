@@ -28,15 +28,14 @@ type stableTokenResponse struct {
 // 强制刷新每天限 20 次且会作废旧 token，这里不使用。
 func StableTokenFetcher(client *Client, appID, appSecret string) TokenFetcher {
 	return func(ctx context.Context) (TokenFetchResult, error) {
-		resp, err := NewTypedRequest[stableTokenResponse](client).
-			Path(StableTokenPath).
+		resp, err := client.Request(StableTokenPath).
 			Body(stableTokenRequest{
 				GrantType: "client_credential",
 				AppID:     appID,
 				Secret:    appSecret,
 			}).
 			WithoutToken().
-			Post(ctx)
+			Post[stableTokenResponse](ctx)
 		if err != nil {
 			return TokenFetchResult{}, fmt.Errorf("request stable access token: %w", err)
 		}

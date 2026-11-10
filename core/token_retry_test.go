@@ -1,12 +1,10 @@
 package core
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -36,34 +34,30 @@ func (p *rotatingTokenProvider) RefreshToken(context.Context) (string, error) {
 }
 
 // newTokenCheckingServer 只接受 access_token=valid 的请求，其余返回 40001。
-func newTokenCheckingServer(t *testing.T, valid string, calls *atomic.Int32) *httptest.Server {
+func newTokenCheckingClient(t *testing.T, valid string, calls *atomic.Int32, token AccessTokenProvider) *Client {
 	t.Helper()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
 		if r.URL.Query().Get("access_token") != valid {
 			_ = json.NewEncoder(w).Encode(map[string]any{"errcode": ErrCodeInvalidToken, "errmsg": "invalid credential"})
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"errcode": 0, "value": "ok"})
-	}))
-	t.Cleanup(server.Close)
-	return server
+	}, token)
 }
 
 type valueResp struct {
 	Value string `json:"value"`
 }
 
-func TestTypedRequestRefreshesTokenOnceOnTokenError(t *testing.T) {
+func TestRequestRefreshesTokenOnceOnTokenError(t *testing.T) {
 	var calls atomic.Int32
-	server := newTokenCheckingServer(t, "new", &calls)
 	provider := &rotatingTokenProvider{}
-	client := newTestClient(t, server, provider)
+	client := newTokenCheckingClient(t, "new", &calls, provider)
 
-	got, err := NewTypedRequest[valueResp](client).
-		Path("/api").
+	got, err := client.Request("/api").
 		Body(map[string]string{"k": "v"}).
-		Post(context.Background())
+		Post[valueResp](context.Background())
 	if err != nil {
 		t.Fatalf("post: %v", err)
 	}
@@ -75,13 +69,12 @@ func TestTypedRequestRefreshesTokenOnceOnTokenError(t *testing.T) {
 	}
 }
 
-func TestTypedRequestRetriesOnlyOnce(t *testing.T) {
+func TestRequestRetriesOnlyOnce(t *testing.T) {
 	var calls atomic.Int32
-	server := newTokenCheckingServer(t, "never", &calls)
 	provider := &rotatingTokenProvider{}
-	client := newTestClient(t, server, provider)
+	client := newTokenCheckingClient(t, "never", &calls, provider)
 
-	_, err := NewTypedRequest[valueResp](client).Path("/api").Get(context.Background())
+	_, err := client.Request("/api").Get[valueResp](context.Background())
 	if !IsTokenError(err) {
 		t.Fatalf("expected token error, got %v", err)
 	}
@@ -90,14 +83,13 @@ func TestTypedRequestRetriesOnlyOnce(t *testing.T) {
 	}
 }
 
-func TestTypedRequestReturnsBothErrorsWhenRefreshFails(t *testing.T) {
+func TestRequestReturnsBothErrorsWhenRefreshFails(t *testing.T) {
 	var calls atomic.Int32
-	server := newTokenCheckingServer(t, "new", &calls)
 	refreshErr := errors.New("refresh failed")
 	provider := &rotatingTokenProvider{refreshErr: refreshErr}
-	client := newTestClient(t, server, provider)
+	client := newTokenCheckingClient(t, "new", &calls, provider)
 
-	_, err := NewTypedRequest[valueResp](client).Path("/api").Get(context.Background())
+	_, err := client.Request("/api").Get[valueResp](context.Background())
 	if !IsTokenError(err) || !errors.Is(err, refreshErr) {
 		t.Fatalf("expected token error joined with refresh error, got %v", err)
 	}
@@ -106,31 +98,28 @@ func TestTypedRequestReturnsBothErrorsWhenRefreshFails(t *testing.T) {
 	}
 }
 
-func TestTypedRequestDoesNotRetryUpload(t *testing.T) {
+func TestRequestRetriesUpload(t *testing.T) {
 	var calls atomic.Int32
-	server := newTokenCheckingServer(t, "new", &calls)
 	provider := &rotatingTokenProvider{}
-	client := newTestClient(t, server, provider)
+	client := newTokenCheckingClient(t, "new", &calls, provider)
 
-	_, err := NewTypedRequest[valueResp](client).
-		Path("/upload").
-		UploadFile("media", "a.jpg", bytes.NewReader([]byte("hello"))).
-		Post(context.Background())
-	if !IsTokenError(err) {
-		t.Fatalf("expected token error, got %v", err)
+	got, err := client.Request("/upload").
+		File("media", "a.jpg", []byte("hello")).
+		Post[valueResp](context.Background())
+	if err != nil || got.Value != "ok" {
+		t.Fatalf("got %+v, %v", got, err)
 	}
-	if calls.Load() != 1 || provider.refreshes.Load() != 0 {
-		t.Fatalf("calls = %d, refreshes = %d; want 1 and 0", calls.Load(), provider.refreshes.Load())
+	if calls.Load() != 2 || provider.refreshes.Load() != 1 {
+		t.Fatalf("calls = %d, refreshes = %d; want 2 and 1", calls.Load(), provider.refreshes.Load())
 	}
 }
 
-func TestTypedRequestWithoutTokenDoesNotRetry(t *testing.T) {
+func TestRequestWithoutTokenDoesNotRetry(t *testing.T) {
 	var calls atomic.Int32
-	server := newTokenCheckingServer(t, "new", &calls)
 	provider := &rotatingTokenProvider{}
-	client := newTestClient(t, server, provider)
+	client := newTokenCheckingClient(t, "new", &calls, provider)
 
-	_, err := NewTypedRequest[valueResp](client).Path("/api").WithoutToken().Get(context.Background())
+	_, err := client.Request("/api").WithoutToken().Get[valueResp](context.Background())
 	if !IsTokenError(err) {
 		t.Fatalf("expected token error, got %v", err)
 	}
@@ -140,7 +129,7 @@ func TestTypedRequestWithoutTokenDoesNotRetry(t *testing.T) {
 }
 
 func TestStableTokenFetcher(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != StableTokenPath {
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
@@ -158,10 +147,8 @@ func TestStableTokenFetcher(t *testing.T) {
 			}
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "stable", "expires_in": 7200})
-	}))
-	defer server.Close()
+	}, nil)
 
-	client := newTestClient(t, server, nil)
 	got, err := StableTokenFetcher(client, "app", "sec")(context.Background())
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
@@ -172,12 +159,9 @@ func TestStableTokenFetcher(t *testing.T) {
 }
 
 func TestStableTokenFetcherReturnsWechatError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"errcode": ErrCodeInvalidAppSecret, "errmsg": "invalid appsecret"})
-	}))
-	defer server.Close()
-
-	client := newTestClient(t, server, nil)
+	}, nil)
 	_, err := StableTokenFetcher(client, "app", "bad")(context.Background())
 	var wechatErr *WechatError
 	if !errors.As(err, &wechatErr) || wechatErr.ErrCode != ErrCodeInvalidAppSecret {

@@ -126,10 +126,9 @@ func TestTypedRequest(t *testing.T) {
 	type sendResp struct {
 		MsgID int `json:"msgid"`
 	}
-	resp, err := Request[sendResp](client).
-		Path("/cgi-bin/message/send").
+	resp, err := client.Request("/cgi-bin/message/send").
 		Body(map[string]any{"msg": "hello"}).
-		Post(context.Background())
+		Post[sendResp](context.Background())
 	if err != nil {
 		t.Fatalf("typed request post: %v", err)
 	}

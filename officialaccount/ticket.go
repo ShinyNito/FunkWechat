@@ -66,10 +66,9 @@ func (c *Client) ticketManager(ticketType TicketType) (*core.TokenManager, error
 		CacheKey: c.ticketCacheKey(ticketType),
 		Logger:   c.cfg.Logger,
 		Fetcher: func(ctx context.Context) (core.TokenFetchResult, error) {
-			resp, err := Request[getTicketResponse](c).
-				Path(getTicketPath).
+			resp, err := c.apiClient.Request(getTicketPath).
 				Query("type", string(ticketType)).
-				Get(ctx)
+				Get[getTicketResponse](ctx)
 			if err != nil {
 				return core.TokenFetchResult{}, fmt.Errorf("get ticket: %w", err)
 			}

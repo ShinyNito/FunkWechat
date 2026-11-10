@@ -1,18 +1,18 @@
 package core
 
-import "testing"
+import (
+	"net/http"
+	"testing"
+)
 
 type benchResp struct {
-	ErrCode int    `json:"errcode"`
-	ErrMsg  string `json:"errmsg"`
-	OpenID  string `json:"openid"`
+	OpenID string `json:"openid"`
 }
 
-func BenchmarkDecodeWechat(b *testing.B) {
-	body := []byte(`{"errcode":0,"errmsg":"ok","openid":"openid-123456"}`)
+func BenchmarkDecodeResponse(b *testing.B) {
+	resp := response{status: http.StatusOK, body: []byte(`{"errcode":0,"errmsg":"ok","openid":"openid-123456"}`)}
 	for b.Loop() {
-		_, err := DecodeWechat[benchResp](200, body)
-		if err != nil {
+		if _, err := decodeJSON[benchResp]("/api", resp, resp.check("/api")); err != nil {
 			b.Fatal(err)
 		}
 	}

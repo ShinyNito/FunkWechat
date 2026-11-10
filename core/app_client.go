@@ -42,14 +42,11 @@ func NewAppClient(cfg AppConfig, tokenCacheKeyPrefix string) (*AppClient, error)
 		cfg.Logger = slog.Default()
 	}
 
-	tokenClient, err := NewClient(ClientConfig{
+	tokenClient := NewClient(ClientConfig{
 		BaseURL:    cfg.BaseURL,
 		HTTPClient: cfg.HTTPClient,
 		Logger:     cfg.Logger,
 	})
-	if err != nil {
-		return nil, err
-	}
 
 	tokens, err := NewTokenManager(TokenManagerConfig{
 		Cache:    cfg.Cache,
@@ -61,15 +58,12 @@ func NewAppClient(cfg AppConfig, tokenCacheKeyPrefix string) (*AppClient, error)
 		return nil, err
 	}
 
-	api, err := NewClient(ClientConfig{
+	api := NewClient(ClientConfig{
 		BaseURL:       cfg.BaseURL,
 		HTTPClient:    cfg.HTTPClient,
 		TokenProvider: tokens,
 		Logger:        cfg.Logger,
 	})
-	if err != nil {
-		return nil, err
-	}
 
 	return &AppClient{Config: cfg, API: api, Tokens: tokens}, nil
 }

@@ -72,14 +72,13 @@ func (c *Client) Code2Session(ctx context.Context, req Code2SessionRequest) (Cod
 		return Code2SessionResponse{}, fmt.Errorf("js_code is required")
 	}
 
-	return Request[Code2SessionResponse](c).
-		Path(Code2SessionPath).
+	return c.apiClient.Request(Code2SessionPath).
 		Query("appid", c.cfg.AppID).
 		Query("secret", c.cfg.AppSecret).
 		Query("js_code", req.JSCode).
 		Query("grant_type", "authorization_code").
 		WithoutToken().
-		Get(ctx)
+		Get[Code2SessionResponse](ctx)
 }
 
 func (c *Client) GetPhoneNumber(ctx context.Context, req GetPhoneNumberRequest) (GetPhoneNumberResponse, error) {
@@ -88,8 +87,7 @@ func (c *Client) GetPhoneNumber(ctx context.Context, req GetPhoneNumberRequest) 
 	}
 
 	payload := map[string]string{"code": req.Code}
-	return Request[GetPhoneNumberResponse](c).
-		Path("/wxa/business/getuserphonenumber").
+	return c.apiClient.Request("/wxa/business/getuserphonenumber").
 		Body(payload).
-		Post(ctx)
+		Post[GetPhoneNumberResponse](ctx)
 }

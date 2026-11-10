@@ -6,20 +6,20 @@ import (
 )
 
 func TestWechatError(t *testing.T) {
-	err := NewWechatError(40001, "invalid")
-	if err.Error() != "wechat error: [40001] invalid" {
+	err := &WechatError{Path: "/cgi-bin/x", ErrCode: 40001, ErrMsg: "invalid"}
+	if err.Error() != "wechat /cgi-bin/x: [40001] invalid" {
 		t.Fatalf("unexpected error message: %s", err.Error())
 	}
 }
 
 func TestIsTokenError(t *testing.T) {
-	if !IsTokenError(NewWechatError(ErrCodeInvalidToken, "invalid token")) {
+	if !IsTokenError(&WechatError{ErrCode: ErrCodeInvalidToken, ErrMsg: "invalid token"}) {
 		t.Fatal("expected invalid token error")
 	}
-	if !IsTokenError(NewWechatError(ErrCodeExpiredToken, "expired token")) {
+	if !IsTokenError(&WechatError{ErrCode: ErrCodeExpiredToken, ErrMsg: "expired token"}) {
 		t.Fatal("expected expired token error")
 	}
-	if IsTokenError(NewWechatError(ErrCodeInvalidAppID, "invalid appid")) {
+	if IsTokenError(&WechatError{ErrCode: ErrCodeInvalidAppID, ErrMsg: "invalid appid"}) {
 		t.Fatal("unexpected token error")
 	}
 	if IsTokenError(errors.New("plain")) {

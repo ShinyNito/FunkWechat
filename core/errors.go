@@ -5,18 +5,16 @@ import (
 	"fmt"
 )
 
-// WechatError 微信业务错误（errcode/errmsg）。
+// WechatError 微信接口返回的业务错误（errcode 非 0）。
 type WechatError struct {
-	ErrCode int    `json:"errcode"`
-	ErrMsg  string `json:"errmsg"`
+	// Path 出错的接口路径，例如 /cgi-bin/message/subscribe/send。
+	Path    string
+	ErrCode int
+	ErrMsg  string
 }
 
 func (e *WechatError) Error() string {
-	return fmt.Sprintf("wechat error: [%d] %s", e.ErrCode, e.ErrMsg)
-}
-
-func NewWechatError(code int, msg string) *WechatError {
-	return &WechatError{ErrCode: code, ErrMsg: msg}
+	return fmt.Sprintf("wechat %s: [%d] %s", e.Path, e.ErrCode, e.ErrMsg)
 }
 
 const (

@@ -41,9 +41,8 @@ func (c *Client) SendSubscribeMessage(ctx context.Context, req SubscribeMessageR
 		return fmt.Errorf("template_id is required")
 	}
 
-	_, err := Request[struct{}](c).
-		Path(SendSubscribeMessagePath).
+	_, err := c.apiClient.Request(SendSubscribeMessagePath).
 		Body(req).
-		Post(ctx)
+		Post[struct{}](ctx)
 	return err
 }
