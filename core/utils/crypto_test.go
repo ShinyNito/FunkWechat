@@ -4,10 +4,9 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestPKCS7PadAndUnpad(t *testing.T) {
@@ -48,18 +47,26 @@ func TestPKCS7PadAndUnpad(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			padded := PKCS7Pad(tt.data, tt.blockSize)
 			if tt.wantErr == nil {
-				assert.Equal(t, tt.wantLen, len(padded))
+				if len(padded) != tt.wantLen {
+					t.Errorf("got %v; want %v", len(padded), tt.wantLen)
+				}
 			}
 
 			if tt.wantErr != nil {
 				_, err := PKCS7Unpad(tt.data, tt.blockSize)
-				assert.ErrorIs(t, err, tt.wantErr)
+				if !errors.Is(err, tt.wantErr) {
+					t.Errorf("error = %v; want %v", err, tt.wantErr)
+				}
 				return
 			}
 
 			out, err := PKCS7Unpad(padded, tt.blockSize)
-			require.NoError(t, err)
-			assert.Equal(t, tt.data, out)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !bytes.Equal(out, tt.data) {
+				t.Errorf("got %q; want %q", out, tt.data)
+			}
 		})
 	}
 }
@@ -70,11 +77,17 @@ func TestAESCBCEncryptDecrypt(t *testing.T) {
 	plaintext := []byte("secret message")
 
 	ciphertext, err := AESCBCEncrypt(plaintext, key, iv)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	decrypted, err := AESCBCDecrypt(ciphertext, key, iv)
-	require.NoError(t, err)
-	assert.Equal(t, plaintext, decrypted)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !bytes.Equal(decrypted, plaintext) {
+		t.Errorf("got %q; want %q", decrypted, plaintext)
+	}
 }
 
 func TestDecryptUserData(t *testing.T) {
@@ -86,10 +99,14 @@ func TestDecryptUserData(t *testing.T) {
 	}
 	payload := userData{NickName: "Alice", Gender: 1}
 	raw, err := json.Marshal(payload)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	ciphertext, err := AESCBCEncrypt(raw, key, iv)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	sessionKey := base64.StdEncoding.EncodeToString(key)
 	encryptedData := base64.StdEncoding.EncodeToString(ciphertext)
@@ -125,12 +142,20 @@ func TestDecryptUserData(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			data, err := DecryptUserData[userData](tt.sessionKey, tt.encrypted, tt.iv)
 			if tt.wantError {
-				assert.Error(t, err)
+				if err == nil {
+					t.Errorf("expected error")
+				}
 				return
 			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantNick, data.NickName)
-			assert.Equal(t, tt.wantGender, data.Gender)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if data.NickName != tt.wantNick {
+				t.Errorf("got %v; want %v", data.NickName, tt.wantNick)
+			}
+			if data.Gender != tt.wantGender {
+				t.Errorf("got %v; want %v", data.Gender, tt.wantGender)
+			}
 		})
 	}
 }
@@ -139,7 +164,9 @@ func TestAESCBCDecrypt_InvalidBlockSize(t *testing.T) {
 	key := []byte("1234567890abcdef")
 	iv := []byte("abcdef1234567890")
 	_, err := AESCBCDecrypt([]byte("short"), key, iv)
-	assert.ErrorIs(t, err, ErrInvalidBlockSize)
+	if !errors.Is(err, ErrInvalidBlockSize) {
+		t.Errorf("error = %v; want %v", err, ErrInvalidBlockSize)
+	}
 }
 
 func TestAESCBC_InvalidIVSize(t *testing.T) {
@@ -149,23 +176,33 @@ func TestAESCBC_InvalidIVSize(t *testing.T) {
 	invalidIV := []byte("short")
 
 	_, err := AESCBCEncrypt(plaintext, key, invalidIV)
-	assert.ErrorIs(t, err, ErrInvalidIVSize)
+	if !errors.Is(err, ErrInvalidIVSize) {
+		t.Errorf("error = %v; want %v", err, ErrInvalidIVSize)
+	}
 
 	_, err = AESCBCDecrypt(ciphertext, key, invalidIV)
-	assert.ErrorIs(t, err, ErrInvalidIVSize)
+	if !errors.Is(err, ErrInvalidIVSize) {
+		t.Errorf("error = %v; want %v", err, ErrInvalidIVSize)
+	}
 }
 
 func TestPKCS7Unpad_InvalidPaddingContent(t *testing.T) {
 	data := []byte{1, 2, 3, 4, 2, 2, 2, 3}
 	_, err := PKCS7Unpad(data, 8)
-	assert.ErrorIs(t, err, ErrInvalidPKCS7Padding)
+	if !errors.Is(err, ErrInvalidPKCS7Padding) {
+		t.Errorf("error = %v; want %v", err, ErrInvalidPKCS7Padding)
+	}
 
 	data = []byte{1, 2, 3, 4, 9, 9, 9, 9}
 	_, err = PKCS7Unpad(data, 8)
-	assert.ErrorIs(t, err, ErrInvalidPKCS7Padding)
+	if !errors.Is(err, ErrInvalidPKCS7Padding) {
+		t.Errorf("error = %v; want %v", err, ErrInvalidPKCS7Padding)
+	}
 
 	// unchanged input on error
-	assert.True(t, bytes.Equal([]byte{1, 2, 3, 4, 9, 9, 9, 9}, data))
+	if !(bytes.Equal([]byte{1, 2, 3, 4, 9, 9, 9, 9}, data)) {
+		t.Errorf("expected true")
+	}
 }
 
 func TestDecryptUserDataWithDifferentStruct(t *testing.T) {
@@ -176,10 +213,14 @@ func TestDecryptUserDataWithDifferentStruct(t *testing.T) {
 		Gender   int    `json:"gender"`
 	}{NickName: "Bob", Gender: 2}
 	raw, err := json.Marshal(payload)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	ciphertext, err := AESCBCEncrypt(raw, key, iv)
-	require.NoError(t, err)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	sessionKey := base64.StdEncoding.EncodeToString(key)
 	encryptedData := base64.StdEncoding.EncodeToString(ciphertext)
@@ -189,17 +230,31 @@ func TestDecryptUserDataWithDifferentStruct(t *testing.T) {
 		NickName string `json:"nickName"`
 		Gender   int    `json:"gender"`
 	}](sessionKey, encryptedData, ivStr)
-	require.NoError(t, err)
-	assert.Equal(t, "Bob", target.NickName)
-	assert.Equal(t, 2, target.Gender)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if target.NickName != "Bob" {
+		t.Errorf("got %v; want %v", target.NickName, "Bob")
+	}
+	if target.Gender != 2 {
+		t.Errorf("got %v; want %v", target.Gender, 2)
+	}
 }
 
 func TestRandomString(t *testing.T) {
 	s, err := RandomString(16)
-	require.NoError(t, err)
-	assert.Len(t, s, 16)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s) != 16 {
+		t.Errorf("len = %d; want 16", len(s))
+	}
 
 	_, err = RandomString(-1)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "non-negative")
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !strings.Contains(err.Error(), "non-negative") {
+		t.Errorf("%q does not contain %q", err.Error(), "non-negative")
+	}
 }

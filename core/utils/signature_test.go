@@ -2,8 +2,6 @@ package utils
 
 import (
 	"testing"
-
-	"github.com/stretchr/testify/assert"
 )
 
 func TestSHA1Sign(t *testing.T) {
@@ -27,27 +25,41 @@ func TestSHA1Sign(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := SHA1Sign(tt.params...)
-			assert.Equal(t, tt.want, got)
+			if got != tt.want {
+				t.Errorf("got %v; want %v", got, tt.want)
+			}
 		})
 	}
 }
 
 func TestSHA256Sign(t *testing.T) {
 	got := SHA256Sign("c", "a", "b")
-	assert.Equal(t, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", got)
+	if got != "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" {
+		t.Errorf("got %v; want %v", got, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+	}
 }
 
 func TestHMACSHA256(t *testing.T) {
 	got := HMACSHA256("hello", "key")
-	assert.Equal(t, "9307b3b915efb5171ff14d8cb55fbcc798c6c0ef1456d66ded1a6aa723a58b7b", got)
+	if got != "9307b3b915efb5171ff14d8cb55fbcc798c6c0ef1456d66ded1a6aa723a58b7b" {
+		t.Errorf("got %v; want %v", got, "9307b3b915efb5171ff14d8cb55fbcc798c6c0ef1456d66ded1a6aa723a58b7b")
+	}
 }
 
 func TestVerifySignature(t *testing.T) {
-	assert.True(t, VerifySignature("6db4861c77e0633e0105672fcd41c9fc2766e26e", "timestamp", "nonce", "token"))
-	assert.False(t, VerifySignature("invalid", "timestamp", "nonce", "token"))
+	if !(VerifySignature("6db4861c77e0633e0105672fcd41c9fc2766e26e", "timestamp", "nonce", "token")) {
+		t.Errorf("expected true")
+	}
+	if VerifySignature("invalid", "timestamp", "nonce", "token") {
+		t.Errorf("expected false")
+	}
 }
 
 func TestVerifyMsgSignature(t *testing.T) {
-	assert.True(t, VerifyMsgSignature("aa7fc06a800892bacf85c0ce5a37f057dbe560ca", "ts", "nonce", "token", "encrypted"))
-	assert.False(t, VerifyMsgSignature("invalid", "ts", "nonce", "token", "encrypted"))
+	if !(VerifyMsgSignature("aa7fc06a800892bacf85c0ce5a37f057dbe560ca", "ts", "nonce", "token", "encrypted")) {
+		t.Errorf("expected true")
+	}
+	if VerifyMsgSignature("invalid", "ts", "nonce", "token", "encrypted") {
+		t.Errorf("expected false")
+	}
 }

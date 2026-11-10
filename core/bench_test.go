@@ -10,7 +10,7 @@ type benchResp struct {
 
 func BenchmarkDecodeWechat(b *testing.B) {
 	body := []byte(`{"errcode":0,"errmsg":"ok","openid":"openid-123456"}`)
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := DecodeWechat[benchResp](200, body)
 		if err != nil {
 			b.Fatal(err)

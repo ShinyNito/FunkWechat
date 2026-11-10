@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -39,52 +40,54 @@ func (c *tokenTestCache) Delete(_ context.Context, key string) error {
 }
 
 func TestTokenManagerSingleflight(t *testing.T) {
-	cache := newTokenTestCache()
-	var calls int32
+	synctest.Test(t, func(t *testing.T) {
+		cache := newTokenTestCache()
+		var calls atomic.Int32
 
-	m, err := NewTokenManager(TokenManagerConfig{
-		Cache:    cache,
-		CacheKey: "token-key",
-		Fetcher: func(ctx context.Context) (TokenFetchResult, error) {
-			atomic.AddInt32(&calls, 1)
-			time.Sleep(30 * time.Millisecond)
-			return TokenFetchResult{Token: "fresh", ExpiresIn: 7200}, nil
-		},
-	})
-	if err != nil {
-		t.Fatalf("new manager: %v", err)
-	}
-
-	var wg sync.WaitGroup
-	for range 10 {
-		wg.Go(func() {
-			token, err := m.GetToken(context.Background())
-			if err != nil {
-				t.Errorf("get token: %v", err)
-				return
-			}
-			if token != "fresh" {
-				t.Errorf("unexpected token: %s", token)
-			}
+		m, err := NewTokenManager(TokenManagerConfig{
+			Cache:    cache,
+			CacheKey: "token-key",
+			Fetcher: func(ctx context.Context) (TokenFetchResult, error) {
+				calls.Add(1)
+				time.Sleep(30 * time.Millisecond)
+				return TokenFetchResult{Token: "fresh", ExpiresIn: 7200}, nil
+			},
 		})
-	}
-	wg.Wait()
+		if err != nil {
+			t.Fatalf("new manager: %v", err)
+		}
 
-	if got := atomic.LoadInt32(&calls); got != 1 {
-		t.Fatalf("expected one fetch call, got %d", got)
-	}
+		var wg sync.WaitGroup
+		for range 10 {
+			wg.Go(func() {
+				token, err := m.GetToken(context.Background())
+				if err != nil {
+					t.Errorf("get token: %v", err)
+					return
+				}
+				if token != "fresh" {
+					t.Errorf("unexpected token: %s", token)
+				}
+			})
+		}
+		wg.Wait()
+
+		if got := calls.Load(); got != 1 {
+			t.Fatalf("expected one fetch call, got %d", got)
+		}
+	})
 }
 
 func TestTokenManagerRefreshBypassesCache(t *testing.T) {
 	cache := newTokenTestCache()
 	_ = cache.Set(context.Background(), "token-key", "cached", 0)
-	var calls int32
+	var calls atomic.Int32
 
 	m, err := NewTokenManager(TokenManagerConfig{
 		Cache:    cache,
 		CacheKey: "token-key",
 		Fetcher: func(ctx context.Context) (TokenFetchResult, error) {
-			atomic.AddInt32(&calls, 1)
+			calls.Add(1)
 			return TokenFetchResult{Token: "fresh", ExpiresIn: 7200}, nil
 		},
 	})
@@ -107,7 +110,7 @@ func TestTokenManagerRefreshBypassesCache(t *testing.T) {
 	if token != "fresh" {
 		t.Fatalf("unexpected refreshed token: %s", token)
 	}
-	if got := atomic.LoadInt32(&calls); got != 1 {
+	if got := calls.Load(); got != 1 {
 		t.Fatalf("expected one fetch call, got %d", got)
 	}
 }

@@ -37,8 +37,8 @@ func IsTokenError(err error) bool {
 	if err == nil {
 		return false
 	}
-	var we *WechatError
-	if !errors.As(err, &we) {
+	we, ok := errors.AsType[*WechatError](err)
+	if !ok {
 		return false
 	}
 	return we.ErrCode == ErrCodeInvalidToken || we.ErrCode == ErrCodeExpiredToken

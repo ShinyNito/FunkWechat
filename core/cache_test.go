@@ -3,10 +3,8 @@ package core
 import (
 	"context"
 	"testing"
+	"testing/synctest"
 	"time"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestMemoryCache_SetAndGet(t *testing.T) {
@@ -50,11 +48,17 @@ func TestMemoryCache_SetAndGet(t *testing.T) {
 			ctx := context.Background()
 
 			err := cache.Set(ctx, tt.key, tt.value, tt.ttl)
-			require.NoError(t, err)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 
 			got, ok := cache.Get(ctx, tt.key)
-			assert.Equal(t, tt.wantOK, ok)
-			assert.Equal(t, tt.wantValue, got)
+			if ok != tt.wantOK {
+				t.Errorf("got %v; want %v", ok, tt.wantOK)
+			}
+			if got != tt.wantValue {
+				t.Errorf("got %v; want %v", got, tt.wantValue)
+			}
 		})
 	}
 }
@@ -64,8 +68,12 @@ func TestMemoryCache_GetNonExistent(t *testing.T) {
 	ctx := context.Background()
 
 	got, ok := cache.Get(ctx, "non_existent_key")
-	assert.False(t, ok, "should return false for non-existent key")
-	assert.Empty(t, got, "should return empty string")
+	if ok {
+		t.Errorf("expected false")
+	}
+	if got != "" {
+		t.Errorf("expected empty"+": %q", got)
+	}
 }
 
 func TestMemoryCache_Delete(t *testing.T) {
@@ -103,11 +111,15 @@ func TestMemoryCache_Delete(t *testing.T) {
 
 			if tt.delete {
 				err := cache.Delete(ctx, tt.key)
-				require.NoError(t, err)
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
 			}
 
 			_, ok := cache.Get(ctx, tt.key)
-			assert.Equal(t, tt.wantOK, ok)
+			if ok != tt.wantOK {
+				t.Errorf("got %v; want %v", ok, tt.wantOK)
+			}
 		})
 	}
 }
@@ -135,33 +147,43 @@ func TestMemoryCache_Expiration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cache := NewMemoryCache()
-			ctx := context.Background()
+			synctest.Test(t, func(t *testing.T) {
+				cache := NewMemoryCache()
+				ctx := context.Background()
 
-			_ = cache.Set(ctx, "expire_test", "value", tt.ttl)
-			time.Sleep(tt.sleepTime)
+				_ = cache.Set(ctx, "expire_test", "value", tt.ttl)
+				time.Sleep(tt.sleepTime)
 
-			_, ok := cache.Get(ctx, "expire_test")
-			assert.Equal(t, tt.wantOK, ok)
+				_, ok := cache.Get(ctx, "expire_test")
+				if ok != tt.wantOK {
+					t.Errorf("got %v; want %v", ok, tt.wantOK)
+				}
+			})
 		})
 	}
 }
 
 func TestMemoryCache_GetRemovesExpiredItem(t *testing.T) {
-	cache := NewMemoryCache()
-	ctx := context.Background()
+	synctest.Test(t, func(t *testing.T) {
+		cache := NewMemoryCache()
+		ctx := context.Background()
 
-	_ = cache.Set(ctx, "temp", "value", 5*time.Millisecond)
-	time.Sleep(10 * time.Millisecond)
+		_ = cache.Set(ctx, "temp", "value", 5*time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 
-	_, ok := cache.Get(ctx, "temp")
-	assert.False(t, ok)
+		_, ok := cache.Get(ctx, "temp")
+		if ok {
+			t.Errorf("expected false")
+		}
 
-	cache.mu.RLock()
-	_, exists := cache.items["temp"]
-	cache.mu.RUnlock()
+		cache.mu.RLock()
+		_, exists := cache.items["temp"]
+		cache.mu.RUnlock()
 
-	assert.False(t, exists, "expired key should be removed after access")
+		if exists {
+			t.Errorf("expected false")
+		}
+	})
 }
 
 func TestMemoryCache_Overwrite(t *testing.T) {
@@ -172,23 +194,33 @@ func TestMemoryCache_Overwrite(t *testing.T) {
 	_ = cache.Set(ctx, "key", "value2", time.Hour)
 
 	got, ok := cache.Get(ctx, "key")
-	require.True(t, ok)
-	assert.Equal(t, "value2", got)
+	if !ok {
+		t.Fatalf("expected true")
+	}
+	if got != "value2" {
+		t.Errorf("got %v; want %v", got, "value2")
+	}
 }
 
 func TestMemoryCache_Cleanup(t *testing.T) {
-	cache := NewMemoryCache()
-	ctx := context.Background()
+	synctest.Test(t, func(t *testing.T) {
+		cache := NewMemoryCache()
+		ctx := context.Background()
 
-	_ = cache.Set(ctx, "expired", "value", 1*time.Millisecond)
-	_ = cache.Set(ctx, "valid", "value", time.Hour)
+		_ = cache.Set(ctx, "expired", "value", 1*time.Millisecond)
+		_ = cache.Set(ctx, "valid", "value", time.Hour)
 
-	time.Sleep(10 * time.Millisecond)
-	cache.Cleanup()
+		time.Sleep(10 * time.Millisecond)
+		cache.Cleanup()
 
-	_, okExpired := cache.Get(ctx, "expired")
-	_, okValid := cache.Get(ctx, "valid")
+		_, okExpired := cache.Get(ctx, "expired")
+		_, okValid := cache.Get(ctx, "valid")
 
-	assert.False(t, okExpired, "expired key should be cleaned up")
-	assert.True(t, okValid, "valid key should still exist")
+		if okExpired {
+			t.Errorf("expected false")
+		}
+		if !okValid {
+			t.Errorf("expected true")
+		}
+	})
 }

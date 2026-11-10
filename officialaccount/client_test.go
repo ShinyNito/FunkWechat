@@ -3,6 +3,7 @@ package officialaccount
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -139,58 +140,93 @@ func TestTypedRequest(t *testing.T) {
 	}
 }
 
-func TestGetTicket_InvalidCachedValueWillRefresh(t *testing.T) {
-	cache := core.NewMemoryCache()
-	tokenCalls := 0
-	ticketCalls := 0
+func newTicketTestServer(t *testing.T, ticketCalls *int) *httptest.Server {
+	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case core.StableTokenPath:
-			tokenCalls++
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"access_token": "token-2",
-				"expires_in":   7200,
-			})
+			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "token-1", "expires_in": 7200})
 		case getTicketPath:
-			ticketCalls++
+			*ticketCalls++
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"errcode":    0,
-				"errmsg":     "ok",
-				"ticket":     "ticket-2",
+				"ticket":     fmt.Sprintf("%s-%d", r.URL.Query().Get("type"), *ticketCalls),
 				"expires_in": 7200,
 			})
 		default:
 			http.NotFound(w, r)
 		}
 	}))
-	defer server.Close()
+	t.Cleanup(server.Close)
+	return server
+}
 
-	client, err := New(Config{
-		AppID:     "appid",
-		AppSecret: "secret",
-		Cache:     cache,
-		BaseURL:   server.URL,
-	})
+func TestGetTicketIgnoresLegacyCacheFormat(t *testing.T) {
+	cache := core.NewMemoryCache()
+	legacy := `{"ticket":"legacy","expires_at":9999999999}`
+	if err := cache.Set(context.Background(), "officialaccount:jsapi_ticket:appid:jsapi", legacy, time.Hour); err != nil {
+		t.Fatalf("set cache: %v", err)
+	}
+	ticketCalls := 0
+	server := newTicketTestServer(t, &ticketCalls)
+
+	client, err := New(Config{AppID: "appid", AppSecret: "secret", Cache: cache, BaseURL: server.URL})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}
 
-	cacheKey := client.ticketCacheKey(TicketTypeJSAPI)
-	if err := cache.Set(context.Background(), cacheKey, "legacy-ticket", time.Minute); err != nil {
-		t.Fatalf("set cache: %v", err)
-	}
-
-	ticket, err := client.GetTicket(context.Background(), GetTicketRequest{Type: TicketTypeJSAPI})
+	ticket, err := client.GetTicket(context.Background(), GetTicketRequest{})
 	if err != nil {
-		t.Fatalf("get ticket with invalid cache: %v", err)
+		t.Fatalf("get ticket: %v", err)
 	}
-	if ticket != "ticket-2" {
-		t.Fatalf("unexpected refreshed ticket: %s", ticket)
+	if ticket != "jsapi-1" {
+		t.Fatalf("ticket = %q; want jsapi-1", ticket)
 	}
-	if tokenCalls != 1 {
-		t.Fatalf("expected 1 token call, got %d", tokenCalls)
+}
+
+func TestRefreshTicketBypassesCache(t *testing.T) {
+	ticketCalls := 0
+	server := newTicketTestServer(t, &ticketCalls)
+	client, err := New(Config{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
 	}
-	if ticketCalls != 1 {
-		t.Fatalf("expected 1 ticket call, got %d", ticketCalls)
+	ctx := context.Background()
+
+	if _, err := client.GetTicket(ctx, GetTicketRequest{}); err != nil {
+		t.Fatalf("get ticket: %v", err)
+	}
+	ticket, err := client.RefreshTicket(ctx, TicketTypeJSAPI)
+	if err != nil {
+		t.Fatalf("refresh ticket: %v", err)
+	}
+	if ticket != "jsapi-2" {
+		t.Fatalf("ticket = %q; want jsapi-2", ticket)
+	}
+	cached, err := client.GetTicket(ctx, GetTicketRequest{Type: TicketTypeJSAPI})
+	if err != nil || cached != "jsapi-2" {
+		t.Fatalf("cached ticket = %q, %v; want jsapi-2", cached, err)
+	}
+}
+
+func TestTicketTypesAreCachedSeparately(t *testing.T) {
+	ticketCalls := 0
+	server := newTicketTestServer(t, &ticketCalls)
+	client, err := New(Config{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	ctx := context.Background()
+
+	jsapi, err := client.GetTicket(ctx, GetTicketRequest{Type: TicketTypeJSAPI})
+	if err != nil {
+		t.Fatalf("get jsapi ticket: %v", err)
+	}
+	card, err := client.GetTicket(ctx, GetTicketRequest{Type: TicketTypeWxCard})
+	if err != nil {
+		t.Fatalf("get wx_card ticket: %v", err)
+	}
+	if jsapi != "jsapi-1" || card != "wx_card-2" || ticketCalls != 2 {
+		t.Fatalf("jsapi = %q, wx_card = %q, calls = %d", jsapi, card, ticketCalls)
 	}
 }

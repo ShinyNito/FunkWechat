@@ -33,8 +33,7 @@ func TestDecodeWechat(t *testing.T) {
 
 	t.Run("wechat error on non2xx", func(t *testing.T) {
 		_, err := DecodeWechat[sample](401, []byte(`{"errcode":40001,"errmsg":"invalid token"}`))
-		var we *WechatError
-		if !errors.As(err, &we) {
+		if _, ok := errors.AsType[*WechatError](err); !ok {
 			t.Fatalf("expected WechatError, got %v", err)
 		}
 	})

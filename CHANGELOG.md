@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
+## [Unreleased]
+
+### Changed
+- `miniprogram.Config` and `officialaccount.Config` are now aliases of the new `core.AppConfig`, and both clients are built with the new `core.NewAppClient`. Existing struct literals keep working.
+- Official account tickets now use `core.TokenManager`: each ticket type is cached and refreshed independently, concurrent refreshes are merged, and callers waiting on a refresh honor context cancellation.
+- Ticket cache entries now store the raw ticket under `officialaccount:ticket:<appid>:<type>`. Entries written by 2.2.0 and earlier under `officialaccount:jsapi_ticket:` are ignored and expire on their own.
+- Removed the testify test dependency; the module now has no third-party dependencies.
+
+### Fixed
+- `officialaccount.Client.RefreshTicket` now always fetches a new ticket. It previously returned the cached ticket when one was present.
+
 ## [2.2.0] - 2026-11-10
 
 ### Changed
