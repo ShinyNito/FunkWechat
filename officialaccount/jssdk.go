@@ -46,7 +46,7 @@ func (c *Client) GetJssdkSign(ctx context.Context, req JssdkSignRequest) (JssdkS
 	signature := c.sign(ticket, nonce, timestamp, trimmedURL)
 
 	return JssdkSignResponse{
-		AppID:     c.cfg.AppID,
+		AppID:     c.Config().AppID,
 		Timestamp: timestamp,
 		NonceStr:  nonce,
 		Signature: signature,

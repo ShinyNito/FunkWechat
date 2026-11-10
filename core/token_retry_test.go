@@ -36,7 +36,7 @@ func (p *rotatingToken) refreshes() int32 {
 }
 
 // newTokenCheckingServer 只接受 access_token=valid 的请求，其余返回 40001。
-func newTokenCheckingClient(t *testing.T, valid string, calls *atomic.Int32, token *credential.Credential) *Client {
+func newTokenCheckingClient(t *testing.T, valid string, calls *atomic.Int32, token *credential.Credential) *client {
 	t.Helper()
 	return newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
@@ -57,7 +57,7 @@ func TestRequestRefreshesTokenOnceOnTokenError(t *testing.T) {
 	provider := &rotatingToken{}
 	client := newTokenCheckingClient(t, "new", &calls, provider.credential())
 
-	got, err := client.Request("/api").
+	got, err := client.request("/api").
 		Body(map[string]string{"k": "v"}).
 		Post[valueResp](context.Background())
 	if err != nil {
@@ -76,7 +76,7 @@ func TestRequestRetriesOnlyOnce(t *testing.T) {
 	provider := &rotatingToken{}
 	client := newTokenCheckingClient(t, "never", &calls, provider.credential())
 
-	_, err := client.Request("/api").Get[valueResp](context.Background())
+	_, err := client.request("/api").Get[valueResp](context.Background())
 	if !IsTokenError(err) {
 		t.Fatalf("expected token error, got %v", err)
 	}
@@ -91,7 +91,7 @@ func TestRequestReturnsBothErrorsWhenRefreshFails(t *testing.T) {
 	provider := &rotatingToken{refreshErr: refreshErr}
 	client := newTokenCheckingClient(t, "new", &calls, provider.credential())
 
-	_, err := client.Request("/api").Get[valueResp](context.Background())
+	_, err := client.request("/api").Get[valueResp](context.Background())
 	if !IsTokenError(err) || !errors.Is(err, refreshErr) {
 		t.Fatalf("expected token error joined with refresh error, got %v", err)
 	}
@@ -105,7 +105,7 @@ func TestRequestRetriesUpload(t *testing.T) {
 	provider := &rotatingToken{}
 	client := newTokenCheckingClient(t, "new", &calls, provider.credential())
 
-	got, err := client.Request("/upload").
+	got, err := client.request("/upload").
 		File("media", "a.jpg", []byte("hello")).
 		Post[valueResp](context.Background())
 	if err != nil || got.Value != "ok" {
@@ -121,7 +121,7 @@ func TestRequestWithoutTokenDoesNotRetry(t *testing.T) {
 	provider := &rotatingToken{}
 	client := newTokenCheckingClient(t, "new", &calls, provider.credential())
 
-	_, err := client.Request("/api").WithoutToken().Get[valueResp](context.Background())
+	_, err := client.request("/api").WithoutToken().Get[valueResp](context.Background())
 	if !IsTokenError(err) {
 		t.Fatalf("expected token error, got %v", err)
 	}
@@ -151,7 +151,7 @@ func TestStableTokenFetcher(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "stable", "expires_in": 7200})
 	}, nil)
 
-	token, ttl, err := StableTokenFetcher(client, "app", "sec")(context.Background())
+	token, ttl, err := stableTokenFetcher(client, "app", "sec")(context.Background())
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestStableTokenFetcherReturnsWechatError(t *testing.T) {
 	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"errcode": ErrCodeInvalidAppSecret, "errmsg": "invalid appsecret"})
 	}, nil)
-	_, _, err := StableTokenFetcher(client, "app", "bad")(context.Background())
+	_, _, err := stableTokenFetcher(client, "app", "bad")(context.Background())
 	var wechatErr *WechatError
 	if !errors.As(err, &wechatErr) || wechatErr.ErrCode != ErrCodeInvalidAppSecret {
 		t.Fatalf("expected appsecret error, got %v", err)

@@ -32,7 +32,7 @@ func newSubscribeTestClient(t *testing.T, handle func(w http.ResponseWriter, bod
 	}))
 	t.Cleanup(server.Close)
 
-	client, err := New(Config{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
+	client, err := New(core.AppConfig{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestSendSubscribeMessageUserRefused(t *testing.T) {
 }
 
 func TestSendSubscribeMessageValidation(t *testing.T) {
-	client, err := New(Config{AppID: "appid", AppSecret: "secret"})
+	client, err := New(core.AppConfig{AppID: "appid", AppSecret: "secret"})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}

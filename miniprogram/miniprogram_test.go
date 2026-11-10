@@ -11,12 +11,12 @@ import (
 )
 
 func TestNewValidation(t *testing.T) {
-	_, err := New(Config{AppSecret: "secret"})
+	_, err := New(core.AppConfig{AppSecret: "secret"})
 	if err == nil {
 		t.Fatal("expected appid validation error")
 	}
 
-	_, err = New(Config{AppID: "appid"})
+	_, err = New(core.AppConfig{AppID: "appid"})
 	if err == nil {
 		t.Fatal("expected appsecret validation error")
 	}
@@ -39,7 +39,7 @@ func TestCode2Session(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := New(Config{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
+	client, err := New(core.AppConfig{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestGetPhoneNumber(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := New(Config{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
+	client, err := New(core.AppConfig{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestTypedRequest(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := New(Config{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
+	client, err := New(core.AppConfig{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}

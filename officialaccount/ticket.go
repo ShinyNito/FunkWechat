@@ -10,7 +10,7 @@ import (
 
 const (
 	getTicketPath        = "/cgi-bin/ticket/getticket"
-	ticketCacheKeyPrefix = "officialaccount:ticket:"
+	ticketCacheKeyPrefix = "funkwechat:ticket:"
 )
 
 type TicketType string
@@ -28,15 +28,15 @@ type getTicketResponse struct {
 func newTicketCredentials(c *Client) map[TicketType]*credential.Credential {
 	tickets := make(map[TicketType]*credential.Credential, 2)
 	for _, ticketType := range []TicketType{TicketTypeJSAPI, TicketTypeWxCard} {
-		key := ticketCacheKeyPrefix + c.cfg.AppID + ":" + string(ticketType)
-		tickets[ticketType] = credential.New(c.cfg.Cache, key, c.fetchTicket(ticketType), c.cfg.Logger)
+		key := ticketCacheKeyPrefix + c.Config().AppID + ":" + string(ticketType)
+		tickets[ticketType] = credential.New(c.Config().Cache, key, c.fetchTicket(ticketType), c.Logger())
 	}
 	return tickets
 }
 
 func (c *Client) fetchTicket(ticketType TicketType) credential.FetchFunc {
 	return func(ctx context.Context) (string, time.Duration, error) {
-		resp, err := c.apiClient.Request(getTicketPath).
+		resp, err := c.Request(getTicketPath).
 			Query("type", string(ticketType)).
 			Get[getTicketResponse](ctx)
 		if err != nil {

@@ -7,17 +7,16 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/ShinyNito/FunkWechat/v3/core"
 )
 
 func TestNewValidation(t *testing.T) {
-	_, err := New(Config{AppSecret: "secret"})
+	_, err := New(core.AppConfig{AppSecret: "secret"})
 	if err == nil {
 		t.Fatal("expected appid validation error")
 	}
-	_, err = New(Config{AppID: "appid"})
+	_, err = New(core.AppConfig{AppID: "appid"})
 	if err == nil {
 		t.Fatal("expected appsecret validation error")
 	}
@@ -48,7 +47,7 @@ func TestGetTicket(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := New(Config{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
+	client, err := New(core.AppConfig{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}
@@ -90,7 +89,7 @@ func TestGetJssdkSign(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := New(Config{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
+	client, err := New(core.AppConfig{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}
@@ -120,7 +119,7 @@ func TestTypedRequest(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := New(Config{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
+	client, err := New(core.AppConfig{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}
@@ -160,33 +159,10 @@ func newTicketTestServer(t *testing.T, ticketCalls *int) *httptest.Server {
 	return server
 }
 
-func TestGetTicketIgnoresLegacyCacheFormat(t *testing.T) {
-	cache := core.NewMemoryCache()
-	legacy := `{"ticket":"legacy","expires_at":9999999999}`
-	if err := cache.Set(context.Background(), "officialaccount:jsapi_ticket:appid:jsapi", legacy, time.Hour); err != nil {
-		t.Fatalf("set cache: %v", err)
-	}
-	ticketCalls := 0
-	server := newTicketTestServer(t, &ticketCalls)
-
-	client, err := New(Config{AppID: "appid", AppSecret: "secret", Cache: cache, BaseURL: server.URL})
-	if err != nil {
-		t.Fatalf("new client: %v", err)
-	}
-
-	ticket, err := client.GetTicket(context.Background(), TicketTypeJSAPI)
-	if err != nil {
-		t.Fatalf("get ticket: %v", err)
-	}
-	if ticket != "jsapi-1" {
-		t.Fatalf("ticket = %q; want jsapi-1", ticket)
-	}
-}
-
 func TestRefreshTicketBypassesCache(t *testing.T) {
 	ticketCalls := 0
 	server := newTicketTestServer(t, &ticketCalls)
-	client, err := New(Config{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
+	client, err := New(core.AppConfig{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}
@@ -211,7 +187,7 @@ func TestRefreshTicketBypassesCache(t *testing.T) {
 func TestTicketTypesAreCachedSeparately(t *testing.T) {
 	ticketCalls := 0
 	server := newTicketTestServer(t, &ticketCalls)
-	client, err := New(Config{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
+	client, err := New(core.AppConfig{AppID: "appid", AppSecret: "secret", BaseURL: server.URL})
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}

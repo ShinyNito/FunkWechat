@@ -15,13 +15,13 @@ import (
 	"time"
 )
 
-// Request 一次微信 API 请求。用 Client.Request 创建，链式设置参数后
+// Request 一次微信 API 请求。用 App.Request 创建，链式设置参数后
 // 用 Get、Post 解码 JSON 响应，或用 GetRaw、PostRaw 取原始响应。
 //
 // 所有终结方法共用同一条执行路径：附加 access_token、解析 errcode、
 // token 失效时刷新并重试一次、限制响应体大小、记录日志。
 type Request struct {
-	client       *Client
+	client       *client
 	path         string
 	query        url.Values
 	jsonBody     any
