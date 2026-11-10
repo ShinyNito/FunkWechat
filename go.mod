@@ -1,3 +1,3 @@
-module github.com/ShinyNito/FunkWechat/v2
+module github.com/ShinyNito/FunkWechat/v3
 
 go 1.27.0

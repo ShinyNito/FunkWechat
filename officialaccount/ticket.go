@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ShinyNito/FunkWechat/v2/core"
+	"github.com/ShinyNito/FunkWechat/v3/core"
 )
 
 const (

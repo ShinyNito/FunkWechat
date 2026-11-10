@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/ShinyNito/FunkWechat/v2/core"
+	"github.com/ShinyNito/FunkWechat/v3/core"
 )
 
 func TestNewValidation(t *testing.T) {

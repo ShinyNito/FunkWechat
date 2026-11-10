@@ -3,7 +3,7 @@ package officialaccount
 import (
 	"sync"
 
-	"github.com/ShinyNito/FunkWechat/v2/core"
+	"github.com/ShinyNito/FunkWechat/v3/core"
 )
 
 const accessTokenCacheKeyPrefix = "officialaccount:access_token:"

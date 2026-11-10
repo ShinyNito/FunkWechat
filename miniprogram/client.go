@@ -1,6 +1,6 @@
 package miniprogram
 
-import "github.com/ShinyNito/FunkWechat/v2/core"
+import "github.com/ShinyNito/FunkWechat/v3/core"
 
 const accessTokenCacheKeyPrefix = "miniprogram:access_token:"
 

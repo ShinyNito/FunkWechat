@@ -87,7 +87,7 @@ func GetTokenClusterSafe(
 安装
 ----
 ```bash
-go get github.com/ShinyNito/FunkWechat/v2
+go get github.com/ShinyNito/FunkWechat/v3
 ```
 
 小程序示例
@@ -100,8 +100,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ShinyNito/FunkWechat/v2/core"
-	"github.com/ShinyNito/FunkWechat/v2/miniprogram"
+	"github.com/ShinyNito/FunkWechat/v3/core"
+	"github.com/ShinyNito/FunkWechat/v3/miniprogram"
 )
 
 func main() {
@@ -165,8 +165,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ShinyNito/FunkWechat/v2/core/utils"
-	"github.com/ShinyNito/FunkWechat/v2/miniprogram"
+	"github.com/ShinyNito/FunkWechat/v3/core/utils"
+	"github.com/ShinyNito/FunkWechat/v3/miniprogram"
 )
 
 type DecryptedPhone struct {
@@ -216,7 +216,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ShinyNito/FunkWechat/v2/officialaccount"
+	"github.com/ShinyNito/FunkWechat/v3/officialaccount"
 )
 
 func main() {
@@ -259,7 +259,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/ShinyNito/FunkWechat/v2/core/utils"
+	"github.com/ShinyNito/FunkWechat/v3/core/utils"
 )
 
 const verifyToken = "your-wechat-token"
