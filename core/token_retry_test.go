@@ -20,7 +20,7 @@ type rotatingToken struct {
 }
 
 func (p *rotatingToken) credential() *credential.Credential {
-	return credential.New(NewMemoryCache(), "token", func(context.Context) (string, time.Duration, error) {
+	return credential.New(nil, "token", func(context.Context) (string, time.Duration, error) {
 		if p.fetches.Add(1) == 1 {
 			return "old", time.Hour, nil
 		}
@@ -41,7 +41,7 @@ func newTokenCheckingClient(t *testing.T, valid string, calls *atomic.Int32, tok
 	return newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
 		if r.URL.Query().Get("access_token") != valid {
-			_ = json.NewEncoder(w).Encode(map[string]any{"errcode": ErrCodeInvalidToken, "errmsg": "invalid credential"})
+			_ = json.NewEncoder(w).Encode(map[string]any{"errcode": ErrInvalidToken.ErrCode, "errmsg": "invalid credential"})
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"errcode": 0, "value": "ok"})
@@ -49,6 +49,7 @@ func newTokenCheckingClient(t *testing.T, valid string, calls *atomic.Int32, tok
 }
 
 type valueResp struct {
+	Status
 	Value string `json:"value"`
 }
 
@@ -162,11 +163,11 @@ func TestStableTokenFetcher(t *testing.T) {
 
 func TestStableTokenFetcherReturnsWechatError(t *testing.T) {
 	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"errcode": ErrCodeInvalidAppSecret, "errmsg": "invalid appsecret"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"errcode": ErrInvalidAppSecret.ErrCode, "errmsg": "invalid appsecret"})
 	}, nil)
 	_, _, err := stableTokenFetcher(client, "app", "bad")(context.Background())
 	var wechatErr *WechatError
-	if !errors.As(err, &wechatErr) || wechatErr.ErrCode != ErrCodeInvalidAppSecret {
+	if !errors.As(err, &wechatErr) || wechatErr.ErrCode != ErrInvalidAppSecret.ErrCode {
 		t.Fatalf("expected appsecret error, got %v", err)
 	}
 	if strings.Contains(err.Error(), "bad") {

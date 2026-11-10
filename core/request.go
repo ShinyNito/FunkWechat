@@ -12,11 +12,21 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
 // Request 一次微信 API 请求。用 App.Request 创建，链式设置参数后
 // 用 Get、Post 解码 JSON 响应，或用 GetRaw、PostRaw 取原始响应。
+//
+// Get、Post 的类型参数 T 是嵌入了 Status 的结构体，例如：
+//
+//	type UserInfo struct {
+//		core.Status
+//		Nickname string `json:"nickname"`
+//	}
+//
+// 接口没有业务字段时直接用 Post[core.Status]。这个要求由编译器检查。
 //
 // 所有终结方法共用同一条执行路径：附加 access_token、解析 errcode、
 // token 失效时刷新并重试一次、限制响应体大小、记录日志。
@@ -79,25 +89,25 @@ func (r *Request) WithoutToken() *Request {
 	return r
 }
 
-func (r *Request) Get[T any](ctx context.Context) (T, error) {
-	resp, err := r.do(ctx, http.MethodGet)
-	return decodeJSON[T](r.path, resp, err)
+// Get 发送 GET 请求并把响应解码为 T。T 必须是嵌入了 Status 的结构体。
+func (r *Request) Get[T any, PT Response[T]](ctx context.Context) (T, error) {
+	return doJSON[T, PT](ctx, r, http.MethodGet)
 }
 
-func (r *Request) Post[T any](ctx context.Context) (T, error) {
-	resp, err := r.do(ctx, http.MethodPost)
-	return decodeJSON[T](r.path, resp, err)
+// Post 发送 POST 请求并把响应解码为 T。T 必须是嵌入了 Status 的结构体。
+func (r *Request) Post[T any, PT Response[T]](ctx context.Context) (T, error) {
+	return doJSON[T, PT](ctx, r, http.MethodPost)
 }
 
 // GetRaw 返回原始响应，用于成功时不返回 JSON 的接口。
 func (r *Request) GetRaw(ctx context.Context) (RawResponse, error) {
-	resp, err := r.do(ctx, http.MethodGet)
+	resp, err := r.do(ctx, http.MethodGet, r.checkRaw)
 	return RawResponse{ContentType: resp.contentType, Body: resp.body}, err
 }
 
 // PostRaw 返回原始响应，用于小程序码等成功时返回图片、失败时返回 JSON 的接口。
 func (r *Request) PostRaw(ctx context.Context) (RawResponse, error) {
-	resp, err := r.do(ctx, http.MethodPost)
+	resp, err := r.do(ctx, http.MethodPost, r.checkRaw)
 	return RawResponse{ContentType: resp.contentType, Body: resp.body}, err
 }
 
@@ -107,33 +117,61 @@ type response struct {
 	body        []byte
 }
 
-func decodeJSON[T any](path string, resp response, err error) (T, error) {
+func (resp response) ok() bool {
+	return resp.status >= 200 && resp.status < 300
+}
+
+func (resp response) httpError(path string) *HTTPError {
+	return &HTTPError{Path: path, StatusCode: resp.status, Body: truncate(resp.body, 256)}
+}
+
+func doJSON[T any, PT Response[T]](ctx context.Context, r *Request, method string) (T, error) {
 	var out T
+	_, err := r.do(ctx, method, func(resp response) error {
+		out = *new(T) // 重试时丢弃上一次的结果
+		return decodeResponse(r.path, resp, PT(&out))
+	})
 	if err != nil {
-		return out, err
-	}
-	if len(bytes.TrimSpace(resp.body)) == 0 {
-		return out, nil
-	}
-	if err := json.Unmarshal(resp.body, &out); err != nil {
-		return out, fmt.Errorf("decode %s response: %w", path, err)
+		return *new(T), err
 	}
 	return out, nil
+}
+
+// decodeResponse 把响应体解码到 out，只解析一遍：errcode、errmsg 落在 out 嵌入的 Status 里。
+// 依次检查 errcode、HTTP 状态码和解码错误。
+func decodeResponse[T any, PT Response[T]](path string, resp response, out PT) error {
+	var decodeErr error
+	if len(bytes.TrimSpace(resp.body)) > 0 {
+		decodeErr = json.Unmarshal(resp.body, out)
+	}
+	// 字段类型不匹配时解码器会继续处理其余成员，所以即使有解码错误，errcode 也已经取到。
+	if status := out.wechatStatus(); status != nil && status.ErrCode != 0 {
+		return &WechatError{Path: path, ErrCode: status.ErrCode, ErrMsg: status.ErrMsg}
+	}
+	if !resp.ok() {
+		return resp.httpError(path)
+	}
+	if decodeErr != nil {
+		return fmt.Errorf("decode %s response: %w", path, decodeErr)
+	}
+	return nil
 }
 
 func (r *Request) usesToken() bool {
 	return !r.withoutToken && r.client.token != nil
 }
 
-// do 执行请求。access_token 失效（40001/42001）时刷新并重试一次，
+// do 执行请求。access_token 失效（40001/40014/42001）时刷新并重试一次，
 // 用于缓存中的 token 已被其他服务作废的情况。请求体已缓冲在内存中，上传也可以重试。
-func (r *Request) do(ctx context.Context, method string) (response, error) {
+//
+// check 检查并解码响应，每次收到响应都会调用一次。
+func (r *Request) do(ctx context.Context, method string, check func(response) error) (response, error) {
 	body, contentType, err := r.encode()
 	if err != nil {
 		return response{}, fmt.Errorf("encode %s request: %w", r.path, err)
 	}
 
-	resp, err := r.send(ctx, method, body, contentType)
+	resp, err := r.send(ctx, method, body, contentType, check)
 	if !IsTokenError(err) || !r.usesToken() {
 		return resp, err
 	}
@@ -143,7 +181,7 @@ func (r *Request) do(ctx context.Context, method string) (response, error) {
 	if _, refreshErr := r.client.token.Refresh(ctx); refreshErr != nil {
 		return resp, errors.Join(err, fmt.Errorf("refresh access token: %w", refreshErr))
 	}
-	return r.send(ctx, method, body, contentType)
+	return r.send(ctx, method, body, contentType, check)
 }
 
 func (r *Request) encode() ([]byte, string, error) {
@@ -186,7 +224,7 @@ func (r *Request) encode() ([]byte, string, error) {
 	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), "application/json", nil
 }
 
-func (r *Request) send(ctx context.Context, method string, body []byte, contentType string) (response, error) {
+func (r *Request) send(ctx context.Context, method string, body []byte, contentType string, check func(response) error) (response, error) {
 	query := maps.Clone(r.query)
 	if r.usesToken() {
 		token, err := r.client.token.Get(ctx)
@@ -218,7 +256,7 @@ func (r *Request) send(ctx context.Context, method string, body []byte, contentT
 	start := time.Now()
 	resp, err := r.receive(req)
 	if err == nil {
-		err = resp.check(r.path)
+		err = check(resp)
 	}
 	r.client.logAttempt(ctx, method, r.path, body, resp, time.Since(start), err)
 	return resp, err
@@ -246,21 +284,23 @@ func (r *Request) receive(req *http.Request) (response, error) {
 	}, nil
 }
 
-// check 优先返回微信的 errcode，其次检查 HTTP 状态码。
-func (resp response) check(path string) error {
-	if wechatErr := parseWechatError(path, resp.body); wechatErr != nil {
+// checkRaw 用于不解码的原始响应：优先返回微信的 errcode，其次检查 HTTP 状态码。
+func (r *Request) checkRaw(resp response) error {
+	if wechatErr := parseWechatError(r.path, resp.body); wechatErr != nil {
 		return wechatErr
 	}
-	if resp.status < 200 || resp.status >= 300 {
-		return fmt.Errorf("%s: http status %d: %s", path, resp.status, truncate(resp.body, 256))
+	if !resp.ok() {
+		return resp.httpError(r.path)
 	}
 	return nil
 }
 
-// parseWechatError 只解析 JSON 对象，图片等二进制响应直接跳过。
+var errcodeKey = []byte(`"errcode"`)
+
+// parseWechatError 只解析带 errcode 字段的 JSON 对象，图片等二进制响应直接跳过。
 func parseWechatError(path string, body []byte) *WechatError {
 	trimmed := bytes.TrimSpace(body)
-	if len(trimmed) == 0 || trimmed[0] != '{' {
+	if len(trimmed) == 0 || trimmed[0] != '{' || !bytes.Contains(trimmed, errcodeKey) {
 		return nil
 	}
 	var envelope struct {
@@ -277,5 +317,6 @@ func truncate(body []byte, limit int) string {
 	if len(body) <= limit {
 		return string(body)
 	}
-	return string(body[:limit]) + "..."
+	// 截断可能落在多字节字符中间，去掉不完整的部分。
+	return strings.ToValidUTF8(string(body[:limit]), "") + "..."
 }

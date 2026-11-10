@@ -11,21 +11,26 @@ The module path is now `github.com/ShinyNito/FunkWechat/v3`. This release reshap
 ### Changed
 - Requests use generic terminal methods: `client.Request(path).Body(...).Post[T](ctx)`. `TypedRequest`, `core.NewTypedRequest`, and the `Request[T]` helpers in `miniprogram` and `officialaccount` are removed.
 - All requests share one execution path. JSON and multipart bodies are buffered, so uploads are also retried once when the access token is rejected. Multipart requests use `File(field, name, content []byte)` and `Field(key, value)`.
+- Response types must embed `core.Status`, which carries `errcode` and `errmsg`. `Get[T]` and `Post[T]` decode the body once into `T` and read the errcode from the embedded field; a type without `core.Status` does not compile. Use `Post[core.Status]` for endpoints with no payload. `Code2SessionResponse` and `GetPhoneNumberResponse` now embed `core.Status`.
 - Added `GetRaw` and `PostRaw` for endpoints that return binary content on success, such as mini program codes. They still return `*core.WechatError` when the response carries a non-zero `errcode`.
 - `miniprogram.New` and `officialaccount.New` take a `core.AppConfig`. Both clients embed `*core.App`, which provides `Request`, `Config`, `Logger`, and `AccessToken`. `core.Client`, `core.NewClient`, `core.NewAppClient`, and the per-package `Config` types are removed.
-- Access tokens and tickets are managed by an internal credential type. The cache is checked at most twice without holding a lock, the fetch runs with `context.WithoutCancel` and a 30-second timeout, and a canceled caller no longer affects other waiters. `core.TokenManager` and `core.AccessTokenProvider` are removed.
+- Access tokens and tickets are managed by an internal credential type that keeps the value in process memory. An unexpired credential is returned with one atomic read. The fetch runs with `context.WithoutCancel` and a 30-second timeout, and a canceled caller no longer affects other waiters. `core.TokenManager` and `core.AccessTokenProvider` are removed.
+- `AppConfig.Cache` is optional and is no longer read on every request: it is read at startup and when a credential expires, and values read from it are rechecked at most once a minute. `Cache.Get` now returns `(value, ok, err)`, and `Cache.Delete` is removed. A failing cache is logged at warn level and the credential is fetched from WeChat.
 - `officialaccount.Client.GetTicket` takes a `TicketType` directly and returns an error for unsupported types. `RefreshTicket` always fetches a new ticket.
 - Cache keys are now `funkwechat:access_token:<appid>` and `funkwechat:ticket:<appid>:<type>`.
 - `core/utils` is renamed to `wxcrypto`. `RandomString` no longer returns an error, `SHA1Sign` and `SHA256Sign` no longer sort the caller's slice, and the JS-SDK signature is available as `wxcrypto.SignJSSDK`.
-- `*core.WechatError` includes the request `Path`, and `NewWechatError` is removed.
+- `*core.WechatError` includes the request `Path` and matches by errcode with `errors.Is`, for example `errors.Is(err, core.ErrUserRefused)`. The `core.ErrCode*` integer constants are replaced by `core.Err*` values, and `NewWechatError` is removed.
+- Non-2xx responses without an errcode return `*core.HTTPError`. Validation failures wrap `core.ErrInvalidArgument`.
+- Added `core.IsRetryable(ctx, err)` for errcode `-1`, HTTP 429 and 5xx, and network timeouts. It returns false once the caller's context is canceled or past its deadline, since a caller deadline and an HTTP client timeout produce the same error. `core.IsTokenError` also covers `40014`.
 - The default HTTP client keeps up to 32 idle connections per host. Responses larger than 10 MB are rejected.
 
 ### Removed
-- `core.RedactQueryMap`, `core.RedactURLQuery`, `core.RedactJSONBody`, `core.DecodeWechat`, `core.StableTokenFetcher`, and `MemoryCache.Cleanup`.
+- `core.RedactQueryMap`, `core.RedactURLQuery`, `core.RedactJSONBody`, `core.DecodeWechat`, `core.StableTokenFetcher`, `core.MemoryCache`, and `core.NewMemoryCache`.
 - The testify test dependency. The module has no third-party dependencies.
 
 ### Security
 - Network errors no longer include the request URL's `access_token`, `secret`, or `js_code`.
+- Debug logs also redact personal data: `openid`, `unionid`, `touser`, `phoneNumber`, `purePhoneNumber`, `encryptedData`, `iv`, and `ticket`.
 
 ### Logging
 - Each API call is logged as one debug line with `appid`, method, path, status, elapsed time, and redacted bodies. A rejected access token is logged at warn level before the retry.

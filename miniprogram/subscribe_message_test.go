@@ -66,12 +66,11 @@ func TestSendSubscribeMessage(t *testing.T) {
 
 func TestSendSubscribeMessageUserRefused(t *testing.T) {
 	client := newSubscribeTestClient(t, func(w http.ResponseWriter, _ map[string]any) {
-		_ = json.NewEncoder(w).Encode(map[string]any{"errcode": core.ErrCodeUserRefused, "errmsg": "user refuse to accept the msg"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"errcode": core.ErrUserRefused.ErrCode, "errmsg": "user refuse to accept the msg"})
 	})
 
 	err := client.SendSubscribeMessage(context.Background(), SubscribeMessageRequest{ToUser: "openid-1", TemplateID: "tpl-1"})
-	var wechatErr *core.WechatError
-	if !errors.As(err, &wechatErr) || wechatErr.ErrCode != core.ErrCodeUserRefused {
+	if !errors.Is(err, core.ErrUserRefused) {
 		t.Fatalf("expected user refused error, got %v", err)
 	}
 }

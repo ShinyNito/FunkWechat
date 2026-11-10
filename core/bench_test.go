@@ -1,18 +1,19 @@
 package core
 
-import (
-	"net/http"
-	"testing"
-)
+import "testing"
 
 type benchResp struct {
-	OpenID string `json:"openid"`
+	Status
+	OpenID     string `json:"openid"`
+	SessionKey string `json:"session_key"`
+	UnionID    string `json:"unionid"`
 }
 
 func BenchmarkDecodeResponse(b *testing.B) {
-	resp := response{status: http.StatusOK, body: []byte(`{"errcode":0,"errmsg":"ok","openid":"openid-123456"}`)}
+	resp := response{status: 200, body: []byte(`{"errcode":0,"errmsg":"ok","openid":"oABCD1234567890","session_key":"c2Vzc2lvbmtleQ==","unionid":"u1234567890"}`)}
 	for b.Loop() {
-		if _, err := decodeJSON[benchResp]("/api", resp, resp.check("/api")); err != nil {
+		var out benchResp
+		if err := decodeResponse("/x", resp, &out); err != nil || out.OpenID == "" {
 			b.Fatal(err)
 		}
 	}

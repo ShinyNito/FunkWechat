@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"github.com/ShinyNito/FunkWechat/v3/core"
 )
 
 const Code2SessionPath = "/sns/jscode2session"
@@ -14,6 +16,7 @@ type Code2SessionRequest struct {
 }
 
 type Code2SessionResponse struct {
+	core.Status
 	OpenID     string `json:"openid"`
 	SessionKey string `json:"session_key"`
 	UnionID    string `json:"unionid,omitempty"`
@@ -24,6 +27,7 @@ type GetPhoneNumberRequest struct {
 }
 
 type GetPhoneNumberResponse struct {
+	core.Status
 	PhoneInfo PhoneInfo `json:"phone_info"`
 }
 
@@ -37,10 +41,6 @@ type PhoneInfo struct {
 type CountryCode string
 
 func (c *CountryCode) UnmarshalJSON(data []byte) error {
-	if c == nil {
-		return fmt.Errorf("countryCode target is nil")
-	}
-
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		*c = ""
@@ -69,7 +69,7 @@ type Watermark struct {
 
 func (c *Client) Code2Session(ctx context.Context, req Code2SessionRequest) (Code2SessionResponse, error) {
 	if req.JSCode == "" {
-		return Code2SessionResponse{}, fmt.Errorf("js_code is required")
+		return Code2SessionResponse{}, fmt.Errorf("%w: js_code is required", core.ErrInvalidArgument)
 	}
 
 	return c.Request(Code2SessionPath).
@@ -83,7 +83,7 @@ func (c *Client) Code2Session(ctx context.Context, req Code2SessionRequest) (Cod
 
 func (c *Client) GetPhoneNumber(ctx context.Context, req GetPhoneNumberRequest) (GetPhoneNumberResponse, error) {
 	if req.Code == "" {
-		return GetPhoneNumberResponse{}, fmt.Errorf("code is required")
+		return GetPhoneNumberResponse{}, fmt.Errorf("%w: code is required", core.ErrInvalidArgument)
 	}
 
 	payload := map[string]string{"code": req.Code}

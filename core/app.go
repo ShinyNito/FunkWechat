@@ -16,8 +16,8 @@ const accessTokenCacheKeyPrefix = "funkwechat:access_token:"
 type AppConfig struct {
 	AppID     string
 	AppSecret string
-	// Cache 存放 access_token 等凭证，为空时使用进程内存缓存。
-	// 多个进程共用一个 Redis 时，可以实现 Cache 接口共享凭证。
+	// Cache 可选。为空时凭证只保存在进程内存里；
+	// 多个进程想共享凭证时，可以基于 Redis 等实现 Cache 接口。
 	Cache Cache
 	// HTTPClient 为空时使用带连接池、30 秒超时的默认客户端。
 	HTTPClient *http.Client
@@ -37,13 +37,10 @@ type App struct {
 // NewApp 校验配置并创建应用。access_token 通过稳定版接口获取，与其他服务并存时不会互相作废。
 func NewApp(cfg AppConfig) (*App, error) {
 	if strings.TrimSpace(cfg.AppID) == "" {
-		return nil, fmt.Errorf("appid is required")
+		return nil, fmt.Errorf("%w: appid is required", ErrInvalidArgument)
 	}
 	if strings.TrimSpace(cfg.AppSecret) == "" {
-		return nil, fmt.Errorf("appsecret is required")
-	}
-	if cfg.Cache == nil {
-		cfg.Cache = NewMemoryCache()
+		return nil, fmt.Errorf("%w: appsecret is required", ErrInvalidArgument)
 	}
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
@@ -56,7 +53,7 @@ func NewApp(cfg AppConfig) (*App, error) {
 	return &App{config: cfg, client: c}, nil
 }
 
-// Config 返回补全默认值后的配置。
+// Config 返回补全默认值后的配置。Cache 未配置时为 nil。
 func (a *App) Config() AppConfig {
 	return a.config
 }

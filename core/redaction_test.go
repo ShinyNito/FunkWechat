@@ -26,6 +26,12 @@ func TestRedactURL(t *testing.T) {
 	}
 }
 
+func TestRedactURLDropsQueryWhenUnparseable(t *testing.T) {
+	if got := redactURL("http://x/%zz?access_token=tok"); strings.Contains(got, "tok") {
+		t.Fatalf("token leaked: %s", got)
+	}
+}
+
 func TestRedactBody(t *testing.T) {
 	body := []byte(`{"appid":"app","secret":"sec","data":{"session_key":"sk","list":[{"access_token":"tok","n":1}]}}`)
 

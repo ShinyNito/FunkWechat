@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ShinyNito/FunkWechat/v3/core"
 	"github.com/ShinyNito/FunkWechat/v3/internal/credential"
 )
 
@@ -21,6 +22,7 @@ const (
 )
 
 type getTicketResponse struct {
+	core.Status
 	Ticket    string `json:"ticket"`
 	ExpiresIn int    `json:"expires_in"`
 }
@@ -50,7 +52,7 @@ func (c *Client) fetchTicket(ticketType TicketType) credential.FetchFunc {
 func (c *Client) GetTicket(ctx context.Context, ticketType TicketType) (string, error) {
 	ticket, ok := c.tickets[ticketType]
 	if !ok {
-		return "", fmt.Errorf("unsupported ticket type %q", ticketType)
+		return "", fmt.Errorf("%w: unsupported ticket type %q", core.ErrInvalidArgument, ticketType)
 	}
 	return ticket.Get(ctx)
 }
@@ -59,7 +61,7 @@ func (c *Client) GetTicket(ctx context.Context, ticketType TicketType) (string, 
 func (c *Client) RefreshTicket(ctx context.Context, ticketType TicketType) (string, error) {
 	ticket, ok := c.tickets[ticketType]
 	if !ok {
-		return "", fmt.Errorf("unsupported ticket type %q", ticketType)
+		return "", fmt.Errorf("%w: unsupported ticket type %q", core.ErrInvalidArgument, ticketType)
 	}
 	return ticket.Refresh(ctx)
 }

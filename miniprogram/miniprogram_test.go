@@ -124,6 +124,7 @@ func TestTypedRequest(t *testing.T) {
 	}
 
 	type sendResp struct {
+		core.Status
 		MsgID int `json:"msgid"`
 	}
 	resp, err := client.Request("/cgi-bin/message/send").

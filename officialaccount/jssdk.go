@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ShinyNito/FunkWechat/v3/core"
 	"github.com/ShinyNito/FunkWechat/v3/wxcrypto"
 )
 
@@ -22,7 +23,7 @@ type JssdkSignResponse struct {
 
 func (c *Client) GetJssdkSign(ctx context.Context, req JssdkSignRequest) (JssdkSignResponse, error) {
 	if req.URL == "" {
-		return JssdkSignResponse{}, fmt.Errorf("url is required")
+		return JssdkSignResponse{}, fmt.Errorf("%w: url is required", core.ErrInvalidArgument)
 	}
 
 	trimmedURL := req.URL

@@ -3,6 +3,8 @@ package miniprogram
 import (
 	"context"
 	"fmt"
+
+	"github.com/ShinyNito/FunkWechat/v3/core"
 )
 
 const SendSubscribeMessagePath = "/cgi-bin/message/subscribe/send"
@@ -32,17 +34,17 @@ type SubscribeMessageValue struct {
 }
 
 // SendSubscribeMessage 发送订阅消息。
-// 用户未订阅或订阅次数已用完时返回 errcode 为 core.ErrCodeUserRefused 的 *core.WechatError。
+// 用户未订阅或订阅次数已用完时返回的错误满足 errors.Is(err, core.ErrUserRefused)。
 func (c *Client) SendSubscribeMessage(ctx context.Context, req SubscribeMessageRequest) error {
 	if req.ToUser == "" {
-		return fmt.Errorf("touser is required")
+		return fmt.Errorf("%w: touser is required", core.ErrInvalidArgument)
 	}
 	if req.TemplateID == "" {
-		return fmt.Errorf("template_id is required")
+		return fmt.Errorf("%w: template_id is required", core.ErrInvalidArgument)
 	}
 
 	_, err := c.Request(SendSubscribeMessagePath).
 		Body(req).
-		Post[struct{}](ctx)
+		Post[core.Status](ctx)
 	return err
 }

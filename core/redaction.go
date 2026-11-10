@@ -11,7 +11,9 @@ import (
 
 const redactedValue = "***"
 
+// sensitiveKeys 日志和错误信息中需要脱敏的字段，键为小写。包括凭证和个人信息。
 var sensitiveKeys = map[string]struct{}{
+	// 凭证
 	"access_token":  {},
 	"appsecret":     {},
 	"app_secret":    {},
@@ -22,13 +24,26 @@ var sensitiveKeys = map[string]struct{}{
 	"refresh_token": {},
 	"secret":        {},
 	"session_key":   {},
+	"ticket":        {},
 	"token":         {},
+	// 个人信息
+	"encrypteddata":   {},
+	"iv":              {},
+	"openid":          {},
+	"phonenumber":     {},
+	"purephonenumber": {},
+	"touser":          {},
+	"unionid":         {},
 }
 
-// redactURL 脱敏 URL 查询参数中的敏感字段。
+// redactURL 脱敏 URL 查询参数中的敏感字段。无法解析时丢弃整个查询串，不原样返回。
 func redactURL(rawURL string) string {
 	parsed, err := url.Parse(rawURL)
-	if err != nil || parsed.RawQuery == "" {
+	if err != nil {
+		base, _, _ := strings.Cut(rawURL, "?")
+		return base
+	}
+	if parsed.RawQuery == "" {
 		return rawURL
 	}
 

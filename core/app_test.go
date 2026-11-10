@@ -53,7 +53,7 @@ func TestAppAccessTokenAndLogs(t *testing.T) {
 	if token, err := app.AccessToken(ctx); err != nil || token != "token-1" {
 		t.Fatalf("access token = %q, %v", token, err)
 	}
-	if _, err := app.Request("/api").Get[struct{}](ctx); err != nil {
+	if _, err := app.Request("/api").Get[Status](ctx); err != nil {
 		t.Fatalf("request: %v", err)
 	}
 	if tokenCalls != 1 {

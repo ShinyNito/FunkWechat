@@ -17,7 +17,7 @@ import (
 )
 
 func fixedToken(value string) *credential.Credential {
-	return credential.New(NewMemoryCache(), "token", func(context.Context) (string, time.Duration, error) {
+	return credential.New(nil, "token", func(context.Context) (string, time.Duration, error) {
 		return value, time.Hour, nil
 	}, nil)
 }
@@ -40,6 +40,7 @@ func TestRequestGetDecodesJSON(t *testing.T) {
 	}, fixedToken("token"))
 
 	type resp struct {
+		Status
 		Nickname string `json:"nickname"`
 	}
 	got, err := client.request("/cgi-bin/user/info").Query("openid", "o123").Get[resp](context.Background())
@@ -60,6 +61,7 @@ func TestRequestWithoutToken(t *testing.T) {
 	}, fixedToken("token"))
 
 	type resp struct {
+		Status
 		OpenID string `json:"openid"`
 	}
 	got, err := client.request("/sns/jscode2session").WithoutToken().Get[resp](context.Background())
@@ -80,7 +82,7 @@ func TestRequestPostJSONDoesNotEscapeHTML(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"errcode": 0})
 	}, nil)
 
-	_, err := client.request("/api").Body(map[string]string{"text": "a&b<c>"}).Post[struct{}](context.Background())
+	_, err := client.request("/api").Body(map[string]string{"text": "a&b<c>"}).Post[Status](context.Background())
 	if err != nil {
 		t.Fatalf("post: %v", err)
 	}
@@ -107,6 +109,7 @@ func TestRequestMultipart(t *testing.T) {
 	}, nil)
 
 	type resp struct {
+		Status
 		MediaID string `json:"media_id"`
 	}
 	got, err := client.request("/cgi-bin/media/upload").
@@ -122,7 +125,7 @@ func TestRequestRejectsJSONBodyWithMultipart(t *testing.T) {
 	client := newTestClient(t, func(http.ResponseWriter, *http.Request) {
 		t.Error("request should not be sent")
 	}, nil)
-	_, err := client.request("/api").Body(map[string]string{}).Field("k", "v").Post[struct{}](context.Background())
+	_, err := client.request("/api").Body(map[string]string{}).Field("k", "v").Post[Status](context.Background())
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -134,9 +137,9 @@ func TestRequestWechatErrorIncludesPath(t *testing.T) {
 		_, _ = w.Write([]byte(`{"errcode":40013,"errmsg":"invalid appid"}`))
 	}, nil)
 
-	_, err := client.request("/api/x").Get[struct{}](context.Background())
+	_, err := client.request("/api/x").Get[Status](context.Background())
 	wechatErr, ok := errors.AsType[*WechatError](err)
-	if !ok || wechatErr.ErrCode != ErrCodeInvalidAppID || wechatErr.Path != "/api/x" {
+	if !ok || wechatErr.ErrCode != ErrInvalidAppID.ErrCode || wechatErr.Path != "/api/x" {
 		t.Fatalf("err = %v", err)
 	}
 	if err.Error() != "wechat /api/x: [40013] invalid appid" {
@@ -150,9 +153,52 @@ func TestRequestHTTPStatusError(t *testing.T) {
 		_, _ = w.Write([]byte("bad gateway"))
 	}, nil)
 
-	_, err := client.request("/api").Get[struct{}](context.Background())
-	if err == nil || !strings.Contains(err.Error(), "http status 502") {
-		t.Fatalf("err = %v", err)
+	_, err := client.request("/api").Get[Status](context.Background())
+	httpErr, ok := errors.AsType[*HTTPError](err)
+	if !ok || httpErr.StatusCode != http.StatusBadGateway || httpErr.Path != "/api" || httpErr.Body != "bad gateway" {
+		t.Fatalf("err = %#v", err)
+	}
+	if !strings.Contains(err.Error(), "http status 502") || !IsRetryable(context.Background(), err) {
+		t.Fatalf("err = %v, retryable = %v", err, IsRetryable(context.Background(), err))
+	}
+}
+
+func TestRequestDecodesResponseWithoutErrcode(t *testing.T) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"openid":"o1","note":"errcode is not a key here"}`))
+	}, nil)
+
+	got, err := client.request("/api").Get[struct {
+		Status
+		OpenID string `json:"openid"`
+	}](context.Background())
+	if err != nil || got.OpenID != "o1" {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+}
+
+func TestRequestDebugLogRedactsPersonalData(t *testing.T) {
+	var logs bytes.Buffer
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"errcode":0,"openid":"OPENID-VALUE","unionid":"UNIONID-VALUE","phone_info":{"phoneNumber":"+8613800138000","purePhoneNumber":"13800138000","countryCode":"86"}}`))
+	}))
+	defer server.Close()
+	client := newClient(server.URL, nil, slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+
+	_, err := client.request("/api").
+		Body(map[string]string{"touser": "TOUSER-VALUE", "template_id": "tpl"}).
+		Post[Status](context.Background())
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	out := logs.String()
+	for _, leaked := range []string{"OPENID-VALUE", "UNIONID-VALUE", "13800138000", "TOUSER-VALUE"} {
+		if strings.Contains(out, leaked) {
+			t.Fatalf("log leaks %s: %s", leaked, out)
+		}
+	}
+	if !strings.Contains(out, "tpl") || !strings.Contains(out, "86") {
+		t.Fatalf("log dropped non-sensitive fields: %s", out)
 	}
 }
 
@@ -180,7 +226,10 @@ func TestRequestRaw(t *testing.T) {
 
 func TestRequestEmptyBody(t *testing.T) {
 	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {}, nil)
-	if _, err := client.request("/api").Get[struct{ A int }](context.Background()); err != nil {
+	if _, err := client.request("/api").Get[struct {
+		Status
+		A int
+	}](context.Background()); err != nil {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -202,7 +251,7 @@ func TestRequestNetworkErrorRedactsSecrets(t *testing.T) {
 	_, err := client.request("/sns/jscode2session").
 		Query("secret", "SECRET-VALUE").
 		Query("js_code", "CODE-VALUE").
-		Get[struct{}](context.Background())
+		Get[Status](context.Background())
 	if err == nil {
 		t.Fatal("expected network error")
 	}
@@ -224,7 +273,7 @@ func TestRequestDebugLogIsRedacted(t *testing.T) {
 	_, err := client.request(StableTokenPath).
 		Body(map[string]string{"appid": "app", "secret": "SECRET-VALUE"}).
 		WithoutToken().
-		Post[struct{}](context.Background())
+		Post[Status](context.Background())
 	if err != nil {
 		t.Fatalf("post: %v", err)
 	}
@@ -236,5 +285,73 @@ func TestRequestDebugLogIsRedacted(t *testing.T) {
 		if strings.Contains(out, leaked) {
 			t.Fatalf("log leaks %s: %s", leaked, out)
 		}
+	}
+}
+
+// selfDecoding 自己实现 UnmarshalJSON 的响应类型：收到完整的响应体，自己负责填充 Status。
+type selfDecoding struct {
+	Status
+	raw string
+}
+
+func (s *selfDecoding) UnmarshalJSON(b []byte) error {
+	s.raw = string(b)
+	return json.Unmarshal(b, &s.Status)
+}
+
+func TestRequestSupportsCustomUnmarshaler(t *testing.T) {
+	body := `{"errcode":0,"errmsg":"ok","openid":"o1"}`
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}, nil)
+	ctx := context.Background()
+
+	got, err := client.request("/api").Get[selfDecoding](ctx)
+	if err != nil || got.raw != body {
+		t.Fatalf("got %q, %v", got.raw, err)
+	}
+
+	body = `{"errcode":40029,"errmsg":"invalid code"}`
+	if _, err := client.request("/api").Get[selfDecoding](ctx); !errors.Is(err, ErrInvalidCode) {
+		t.Fatalf("err = %v; want ErrInvalidCode", err)
+	}
+}
+
+func TestRequestResultCarriesNoStatusOnSuccess(t *testing.T) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"errcode":0,"errmsg":"ok"}`))
+	}, nil)
+
+	got, err := client.request("/api").Post[Status](context.Background())
+	if err != nil || got.ErrCode != 0 {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+}
+
+func TestRequestReturnsWechatErrorWhenPayloadShapeDiffers(t *testing.T) {
+	// 出错时 data 的类型和成功时不同，errcode 还排在它后面，仍然要得到 WechatError。
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":"unavailable","errmsg":"invalid code","errcode":40029}`))
+	}, nil)
+
+	_, err := client.request("/api").Get[struct {
+		Status
+		Data struct {
+			ID int `json:"id"`
+		} `json:"data"`
+	}](context.Background())
+	if !errors.Is(err, ErrInvalidCode) {
+		t.Fatalf("err = %v; want ErrInvalidCode", err)
+	}
+}
+
+func TestRequestDecodeError(t *testing.T) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`<html>maintenance</html>`))
+	}, nil)
+
+	_, err := client.request("/api").Get[Status](context.Background())
+	if err == nil || !strings.Contains(err.Error(), "decode /api response") {
+		t.Fatalf("err = %v", err)
 	}
 }

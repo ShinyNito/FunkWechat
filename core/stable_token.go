@@ -19,6 +19,7 @@ type stableTokenRequest struct {
 }
 
 type stableTokenResponse struct {
+	Status
 	AccessToken string `json:"access_token"`
 	ExpiresIn   int    `json:"expires_in"`
 }
