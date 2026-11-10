@@ -93,7 +93,7 @@ func (c *Client) logRequest(ctx context.Context, method, rawURL string, body []b
 		slog.String("url", RedactURLQuery(rawURL)),
 	}
 	if len(body) > 0 {
-		attrs = append(attrs, slog.String("body", string(body)))
+		attrs = append(attrs, slog.String("body", RedactJSONBody(body)))
 	}
 	c.logger.LogAttrs(ctx, slog.LevelDebug, "http request", attrs...)
 }
@@ -105,7 +105,7 @@ func (c *Client) logResponse(ctx context.Context, statusCode int, body []byte) {
 
 	attrs := []slog.Attr{slog.Int("status", statusCode)}
 	if len(body) > 0 {
-		attrs = append(attrs, slog.String("body", string(body)))
+		attrs = append(attrs, slog.String("body", RedactJSONBody(body)))
 	}
 	c.logger.LogAttrs(ctx, slog.LevelDebug, "http response", attrs...)
 }

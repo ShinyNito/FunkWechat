@@ -84,6 +84,10 @@ func (b *RequestBuilder) UploadField(key, value string) *RequestBuilder {
 	return b
 }
 
+func (b *RequestBuilder) canRetryWithNewToken() bool {
+	return b.withToken && b.client.tokenProvider != nil && b.uploadFile == nil
+}
+
 func (b *RequestBuilder) Get(ctx context.Context) (RawResponse, error) {
 	return b.execute(ctx, http.MethodGet)
 }

@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/ShinyNito/FunkWechat/v2/core"
 )
 
 func TestNewValidation(t *testing.T) {
@@ -55,7 +57,7 @@ func TestGetPhoneNumber(t *testing.T) {
 	tokenCalls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case accessTokenPath:
+		case core.StableTokenPath:
 			tokenCalls++
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"access_token": "token-1",
@@ -106,7 +108,7 @@ func TestGetPhoneNumber(t *testing.T) {
 func TestTypedRequest(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case accessTokenPath:
+		case core.StableTokenPath:
 			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "token-1", "expires_in": 7200})
 		case "/cgi-bin/message/send":
 			_ = json.NewEncoder(w).Encode(map[string]any{"errcode": 0, "msgid": 123})

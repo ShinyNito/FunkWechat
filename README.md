@@ -9,8 +9,10 @@ FunkWechat v2
 ----
 - 强类型链式请求：`Request[T](client).Path(...).Post(ctx)`
 - 统一核心内核：请求执行、上传、微信错误解码、token 管理
+- 稳定版 access_token：使用 `/cgi-bin/stable_token`，与其他服务、其他实例并存时不会互相作废 token
 - Token 刷新去重：并发场景下单飞（singleflight-style）
-- 默认支持 query 脱敏日志
+- Token 失效自动重试：遇到 40001/42001 刷新 token 后重试一次（上传请求除外）
+- 默认脱敏日志：URL 参数与 JSON 请求体、响应体中的 secret、access_token、session_key 等字段
 
 AccessToken 并发刷新策略（防竞态 / 防 API 风暴）
 ----
@@ -29,7 +31,9 @@ FunkWechat `core.TokenManager` 已内置单机并发去重能力，核心点如�
 
 多实例部署（K8s/多 Pod）建议
 ----
-`TokenManager` 的单飞范围是“单进程”。如果有多个实例，建议在刷新入口增加分布式锁，避免跨实例 thundering herd：
+access_token 通过稳定版接口的普通模式获取，多个实例各自获取不会让彼此的 token 失效，因此多实例部署不需要额外处理即可正确工作。
+
+`TokenManager` 的单飞范围是“单进程”。如果实例数量很多，希望进一步减少对微信接口的调用，可以在刷新入口增加分布式锁，避免跨实例 thundering herd：
 
 1. 先查共享缓存（Redis）。
 2. 未命中时尝试加锁（`SET lockKey val NX PX 5000`）。
@@ -93,8 +97,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/ShinyNito/FunkWechat/v2/core"
 	"github.com/ShinyNito/FunkWechat/v2/miniprogram"
 )
 
@@ -115,17 +121,34 @@ func main() {
 	}
 	fmt.Println(session.OpenID)
 
-	type SendResp struct {
-		MsgID int `json:"msgid"`
+	err = client.SendSubscribeMessage(context.Background(), miniprogram.SubscribeMessageRequest{
+		ToUser:     session.OpenID,
+		TemplateID: "your-template-id",
+		Page:       "/pages/index/index",
+		Data: map[string]miniprogram.SubscribeMessageValue{
+			"thing1": {Value: "订单已发货"},
+		},
+		MiniProgramState: miniprogram.MiniProgramStateFormal,
+	})
+	var wechatErr *core.WechatError
+	if errors.As(err, &wechatErr) && wechatErr.ErrCode == core.ErrCodeUserRefused {
+		fmt.Println("用户未订阅或订阅次数已用完")
+	} else if err != nil {
+		panic(err)
 	}
-	sendResp, err := miniprogram.Request[SendResp](client).
-		Path("/cgi-bin/message/send").
-		Body(map[string]any{"touser": "openid"}).
+
+	// 未封装的接口可以用强类型请求直接调用
+	type QRCodeResp struct {
+		Link string `json:"link"`
+	}
+	link, err := miniprogram.Request[QRCodeResp](client).
+		Path("/wxa/generate_urllink").
+		Body(map[string]any{"path": "/pages/index/index"}).
 		Post(context.Background())
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(sendResp.MsgID)
+	fmt.Println(link.Link)
 }
 ```
 

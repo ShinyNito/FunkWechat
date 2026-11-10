@@ -2,6 +2,7 @@ package core
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -47,5 +48,28 @@ func TestRedactURLQuery(t *testing.T) {
 	}
 	if parsed.Query().Get("grant_type") != "client_credential" {
 		t.Fatalf("expected grant_type to remain unchanged")
+	}
+}
+
+func TestRedactJSONBody(t *testing.T) {
+	body := []byte(`{"appid":"app","secret":"sec","data":{"session_key":"sk","list":[{"access_token":"tok","n":1}]}}`)
+
+	got := RedactJSONBody(body)
+
+	for _, leaked := range []string{`"sec"`, `"sk"`, `"tok"`} {
+		if strings.Contains(got, leaked) {
+			t.Fatalf("expected %s to be redacted, got %s", leaked, got)
+		}
+	}
+	for _, kept := range []string{`"appid":"app"`, `"n":1`} {
+		if !strings.Contains(got, kept) {
+			t.Fatalf("expected %s to be kept, got %s", kept, got)
+		}
+	}
+}
+
+func TestRedactJSONBodyNonJSON(t *testing.T) {
+	if got := RedactJSONBody([]byte("secret=abc")); got != "<non-JSON body, 10 bytes>" {
+		t.Fatalf("unexpected output: %s", got)
 	}
 }

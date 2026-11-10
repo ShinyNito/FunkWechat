@@ -1,7 +1,6 @@
 package officialaccount
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -12,7 +11,6 @@ import (
 )
 
 const (
-	accessTokenPath           = "/cgi-bin/token"
 	accessTokenCacheKeyPrefix = "officialaccount:access_token:"
 	tokenExpireBuffer         = 300
 )
@@ -31,11 +29,6 @@ type Client struct {
 	apiClient    *core.Client
 	tokenManager *core.TokenManager
 	ticketMu     sync.Mutex
-}
-
-type accessTokenResponse struct {
-	AccessToken string `json:"access_token"`
-	ExpiresIn   int    `json:"expires_in"`
 }
 
 func New(cfg Config) (*Client, error) {
@@ -58,19 +51,7 @@ func New(cfg Config) (*Client, error) {
 		CacheKey:            accessTokenCacheKeyPrefix + cfg.AppID,
 		ExpireBufferSeconds: tokenExpireBuffer,
 		Logger:              cfg.Logger,
-		Fetcher: func(ctx context.Context) (core.TokenFetchResult, error) {
-			resp, err := core.NewTypedRequest[accessTokenResponse](tokenClient).
-				Path(accessTokenPath).
-				Query("grant_type", "client_credential").
-				Query("appid", cfg.AppID).
-				Query("secret", cfg.AppSecret).
-				WithoutToken().
-				Get(ctx)
-			if err != nil {
-				return core.TokenFetchResult{}, fmt.Errorf("request access token: %w", err)
-			}
-			return core.TokenFetchResult{Token: resp.AccessToken, ExpiresIn: resp.ExpiresIn}, nil
-		},
+		Fetcher:             core.StableTokenFetcher(tokenClient, cfg.AppID, cfg.AppSecret),
 	})
 	if err != nil {
 		return nil, err

@@ -27,7 +27,7 @@ func TestGetTicket(t *testing.T) {
 	ticketCalls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case accessTokenPath:
+		case core.StableTokenPath:
 			tokenCalls++
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"access_token": "token-1",
@@ -79,7 +79,7 @@ func TestGetTicket(t *testing.T) {
 func TestGetJssdkSign(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case accessTokenPath:
+		case core.StableTokenPath:
 			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "token-1", "expires_in": 7200})
 		case getTicketPath:
 			_ = json.NewEncoder(w).Encode(map[string]any{"errcode": 0, "ticket": "ticket-1", "expires_in": 7200})
@@ -109,7 +109,7 @@ func TestGetJssdkSign(t *testing.T) {
 func TestTypedRequest(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case accessTokenPath:
+		case core.StableTokenPath:
 			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "token-1", "expires_in": 7200})
 		case "/cgi-bin/message/send":
 			_ = json.NewEncoder(w).Encode(map[string]any{"errcode": 0, "msgid": 123})
@@ -145,7 +145,7 @@ func TestGetTicket_InvalidCachedValueWillRefresh(t *testing.T) {
 	ticketCalls := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case accessTokenPath:
+		case core.StableTokenPath:
 			tokenCalls++
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"access_token": "token-2",

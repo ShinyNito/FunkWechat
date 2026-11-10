@@ -30,6 +30,7 @@ const (
 	ErrCodeCodeUsed         = 40163
 	ErrCodeFreqLimit        = 45011
 	ErrCodeAPIUnauthorized  = 48001
+	ErrCodeUserRefused      = 43101 // 用户拒绝接收消息；订阅消息中表示未订阅或订阅次数已用完
 )
 
 func IsTokenError(err error) bool {

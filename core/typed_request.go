@@ -2,6 +2,8 @@ package core
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 )
 
@@ -49,16 +51,27 @@ func (r *TypedRequest[T]) UploadField(key, value string) *TypedRequest[T] {
 }
 
 func (r *TypedRequest[T]) Get(ctx context.Context) (T, error) {
-	resp, err := r.builder.Get(ctx)
-	if err != nil {
-		var zero T
-		return zero, err
-	}
-	return DecodeWechat[T](resp.StatusCode, resp.Body)
+	return r.do(ctx, r.builder.Get)
 }
 
 func (r *TypedRequest[T]) Post(ctx context.Context) (T, error) {
-	resp, err := r.builder.Post(ctx)
+	return r.do(ctx, r.builder.Post)
+}
+
+// do 发送请求并解码。access_token 失效（40001/42001）时刷新 token 并重试一次，
+// 用于缓存中的 token 已被其他服务作废的情况。上传请求的文件流无法重放，不重试。
+func (r *TypedRequest[T]) do(ctx context.Context, send func(context.Context) (RawResponse, error)) (T, error) {
+	out, err := decode[T](send(ctx))
+	if !IsTokenError(err) || !r.builder.canRetryWithNewToken() {
+		return out, err
+	}
+	if _, refreshErr := r.builder.client.tokenProvider.RefreshToken(ctx); refreshErr != nil {
+		return out, errors.Join(err, fmt.Errorf("refresh access token: %w", refreshErr))
+	}
+	return decode[T](send(ctx))
+}
+
+func decode[T any](resp RawResponse, err error) (T, error) {
 	if err != nil {
 		var zero T
 		return zero, err
