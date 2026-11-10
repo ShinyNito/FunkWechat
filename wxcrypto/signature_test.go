@@ -1,4 +1,4 @@
-package utils
+package wxcrypto
 
 import (
 	"testing"
@@ -61,5 +61,22 @@ func TestVerifyMsgSignature(t *testing.T) {
 	}
 	if VerifyMsgSignature("invalid", "ts", "nonce", "token", "encrypted") {
 		t.Errorf("expected false")
+	}
+}
+
+func TestSHA1SignDoesNotModifyInput(t *testing.T) {
+	params := []string{"nonce", "token", "timestamp"}
+	_ = SHA1Sign(params...)
+	if params[0] != "nonce" || params[1] != "token" || params[2] != "timestamp" {
+		t.Fatalf("params modified: %v", params)
+	}
+}
+
+func TestSignJSSDK(t *testing.T) {
+	// 微信 JS-SDK 文档附录 1 的示例。
+	got := SignJSSDK("sM4AOVdWfPE4DxkXGEs8VMCPGGVi4C3VM0P37wVUCFvkVAy_90u5h9nbSlYy3-Sl-HhTdfl2fzFy1AOcHKP7qg",
+		"Wm3WZYTPz0wzccnW", 1414587457, "http://mp.weixin.qq.com?params=value")
+	if got != "0f9de62fce790f9a083d5c99e95740ceb90c27ed" {
+		t.Fatalf("signature = %s", got)
 	}
 }

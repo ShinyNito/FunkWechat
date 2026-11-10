@@ -1,4 +1,4 @@
-package utils
+package wxcrypto
 
 import (
 	"crypto/aes"
@@ -8,26 +8,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 )
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
-// RandomString 生成指定长度的随机字符串
-func RandomString(n int) (string, error) {
-	if n < 0 {
-		return "", fmt.Errorf("length must be non-negative")
-	}
-
+// RandomString 返回由字母和数字组成的随机字符串，用作签名的 nonce。
+// 按字节取模映射到 62 个字符，分布有轻微偏差，不适合用作密钥。
+func RandomString(n int) string {
 	b := make([]byte, n)
+	_, _ = rand.Read(b) // crypto/rand.Read 自 Go 1.24 起不会返回错误
 	for i := range b {
-		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(letterBytes))))
-		if err != nil {
-			return "", fmt.Errorf("generate random int: %w", err)
-		}
-		b[i] = letterBytes[num.Int64()]
+		b[i] = letterBytes[int(b[i])%len(letterBytes)]
 	}
-	return string(b), nil
+	return string(b)
 }
 
 var (

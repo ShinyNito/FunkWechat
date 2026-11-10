@@ -201,26 +201,3 @@ func TestMemoryCache_Overwrite(t *testing.T) {
 		t.Errorf("got %v; want %v", got, "value2")
 	}
 }
-
-func TestMemoryCache_Cleanup(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		cache := NewMemoryCache()
-		ctx := context.Background()
-
-		_ = cache.Set(ctx, "expired", "value", 1*time.Millisecond)
-		_ = cache.Set(ctx, "valid", "value", time.Hour)
-
-		time.Sleep(10 * time.Millisecond)
-		cache.Cleanup()
-
-		_, okExpired := cache.Get(ctx, "expired")
-		_, okValid := cache.Get(ctx, "valid")
-
-		if okExpired {
-			t.Errorf("expected false")
-		}
-		if !okValid {
-			t.Errorf("expected true")
-		}
-	})
-}

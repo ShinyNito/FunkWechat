@@ -1,4 +1,4 @@
-package utils
+package wxcrypto
 
 import (
 	"bytes"
@@ -242,19 +242,16 @@ func TestDecryptUserDataWithDifferentStruct(t *testing.T) {
 }
 
 func TestRandomString(t *testing.T) {
-	s, err := RandomString(16)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	s := RandomString(16)
 	if len(s) != 16 {
-		t.Errorf("len = %d; want 16", len(s))
+		t.Fatalf("len = %d; want 16", len(s))
 	}
-
-	_, err = RandomString(-1)
-	if err == nil {
-		t.Fatalf("expected error")
+	for _, r := range s {
+		if !strings.ContainsRune(letterBytes, r) {
+			t.Fatalf("unexpected rune %q in %q", r, s)
+		}
 	}
-	if !strings.Contains(err.Error(), "non-negative") {
-		t.Errorf("%q does not contain %q", err.Error(), "non-negative")
+	if RandomString(16) == s {
+		t.Fatal("expected different strings")
 	}
 }

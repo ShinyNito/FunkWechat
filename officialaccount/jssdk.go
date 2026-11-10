@@ -2,13 +2,11 @@ package officialaccount
 
 import (
 	"context"
-	"crypto/sha1"
-	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/ShinyNito/FunkWechat/v3/core/utils"
+	"github.com/ShinyNito/FunkWechat/v3/wxcrypto"
 )
 
 type JssdkSignRequest struct {
@@ -37,13 +35,10 @@ func (c *Client) GetJssdkSign(ctx context.Context, req JssdkSignRequest) (JssdkS
 		return JssdkSignResponse{}, fmt.Errorf("get jsapi_ticket: %w", err)
 	}
 
-	nonce, err := utils.RandomString(16)
-	if err != nil {
-		return JssdkSignResponse{}, fmt.Errorf("generate nonce: %w", err)
-	}
+	nonce := wxcrypto.RandomString(16)
 
 	timestamp := time.Now().Unix()
-	signature := c.sign(ticket, nonce, timestamp, trimmedURL)
+	signature := wxcrypto.SignJSSDK(ticket, nonce, timestamp, trimmedURL)
 
 	return JssdkSignResponse{
 		AppID:     c.Config().AppID,
@@ -51,12 +46,4 @@ func (c *Client) GetJssdkSign(ctx context.Context, req JssdkSignRequest) (JssdkS
 		NonceStr:  nonce,
 		Signature: signature,
 	}, nil
-}
-
-func (c *Client) sign(ticket, nonce string, timestamp int64, rawURL string) string {
-	signStr := fmt.Sprintf("jsapi_ticket=%s&noncestr=%s&timestamp=%d&url=%s", ticket, nonce, timestamp, rawURL)
-
-	h := sha1.New()
-	_, _ = h.Write([]byte(signStr))
-	return hex.EncodeToString(h.Sum(nil))
 }

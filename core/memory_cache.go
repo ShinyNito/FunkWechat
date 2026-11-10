@@ -86,17 +86,5 @@ func (c *MemoryCache) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
-// Cleanup 清理过期缓存项（可选，用于定期清理）
-func (c *MemoryCache) Cleanup() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	for key, item := range c.items {
-		if item.isExpired() {
-			delete(c.items, key)
-		}
-	}
-}
-
 // 确保 MemoryCache 实现了 Cache 接口
 var _ Cache = (*MemoryCache)(nil)
