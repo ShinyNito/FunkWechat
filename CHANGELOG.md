@@ -4,16 +4,31 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
-## [Unreleased]
+## [3.0.0] - 2026-11-10
+
+The module path is now `github.com/ShinyNito/FunkWechat/v3`. This release reshapes the API without compatibility shims.
 
 ### Changed
-- `miniprogram.Config` and `officialaccount.Config` are now aliases of the new `core.AppConfig`, and both clients are built with the new `core.NewAppClient`. Existing struct literals keep working.
-- Official account tickets now use `core.TokenManager`: each ticket type is cached and refreshed independently, concurrent refreshes are merged, and callers waiting on a refresh honor context cancellation.
-- Ticket cache entries now store the raw ticket under `officialaccount:ticket:<appid>:<type>`. Entries written by 2.2.0 and earlier under `officialaccount:jsapi_ticket:` are ignored and expire on their own.
-- Removed the testify test dependency; the module now has no third-party dependencies.
+- Requests use generic terminal methods: `client.Request(path).Body(...).Post[T](ctx)`. `TypedRequest`, `core.NewTypedRequest`, and the `Request[T]` helpers in `miniprogram` and `officialaccount` are removed.
+- All requests share one execution path. JSON and multipart bodies are buffered, so uploads are also retried once when the access token is rejected. Multipart requests use `File(field, name, content []byte)` and `Field(key, value)`.
+- Added `GetRaw` and `PostRaw` for endpoints that return binary content on success, such as mini program codes. They still return `*core.WechatError` when the response carries a non-zero `errcode`.
+- `miniprogram.New` and `officialaccount.New` take a `core.AppConfig`. Both clients embed `*core.App`, which provides `Request`, `Config`, `Logger`, and `AccessToken`. `core.Client`, `core.NewClient`, `core.NewAppClient`, and the per-package `Config` types are removed.
+- Access tokens and tickets are managed by an internal credential type. The cache is checked at most twice without holding a lock, the fetch runs with `context.WithoutCancel` and a 30-second timeout, and a canceled caller no longer affects other waiters. `core.TokenManager` and `core.AccessTokenProvider` are removed.
+- `officialaccount.Client.GetTicket` takes a `TicketType` directly and returns an error for unsupported types. `RefreshTicket` always fetches a new ticket.
+- Cache keys are now `funkwechat:access_token:<appid>` and `funkwechat:ticket:<appid>:<type>`.
+- `core/utils` is renamed to `wxcrypto`. `RandomString` no longer returns an error, `SHA1Sign` and `SHA256Sign` no longer sort the caller's slice, and the JS-SDK signature is available as `wxcrypto.SignJSSDK`.
+- `*core.WechatError` includes the request `Path`, and `NewWechatError` is removed.
+- The default HTTP client keeps up to 32 idle connections per host. Responses larger than 10 MB are rejected.
 
-### Fixed
-- `officialaccount.Client.RefreshTicket` now always fetches a new ticket. It previously returned the cached ticket when one was present.
+### Removed
+- `core.RedactQueryMap`, `core.RedactURLQuery`, `core.RedactJSONBody`, `core.DecodeWechat`, `core.StableTokenFetcher`, and `MemoryCache.Cleanup`.
+- The testify test dependency. The module has no third-party dependencies.
+
+### Security
+- Network errors no longer include the request URL's `access_token`, `secret`, or `js_code`.
+
+### Logging
+- Each API call is logged as one debug line with `appid`, method, path, status, elapsed time, and redacted bodies. A rejected access token is logged at warn level before the retry.
 
 ## [2.2.0] - 2026-11-10
 
