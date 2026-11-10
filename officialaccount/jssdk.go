@@ -32,7 +32,7 @@ func (c *Client) GetJssdkSign(ctx context.Context, req JssdkSignRequest) (JssdkS
 		trimmedURL = trimmedURL[:idx]
 	}
 
-	ticket, err := c.GetTicket(ctx, GetTicketRequest{Type: TicketTypeJSAPI})
+	ticket, err := c.GetTicket(ctx, TicketTypeJSAPI)
 	if err != nil {
 		return JssdkSignResponse{}, fmt.Errorf("get jsapi_ticket: %w", err)
 	}

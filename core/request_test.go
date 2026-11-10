@@ -11,20 +11,22 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/ShinyNito/FunkWechat/v3/internal/credential"
 )
 
-type staticTokenProvider struct {
-	token string
+func fixedToken(value string) *credential.Credential {
+	return credential.New(NewMemoryCache(), "token", func(context.Context) (string, time.Duration, error) {
+		return value, time.Hour, nil
+	}, nil)
 }
 
-func (s *staticTokenProvider) GetToken(context.Context) (string, error)     { return s.token, nil }
-func (s *staticTokenProvider) RefreshToken(context.Context) (string, error) { return s.token, nil }
-
-func newTestClient(t *testing.T, handler http.HandlerFunc, token AccessTokenProvider) *Client {
+func newTestClient(t *testing.T, handler http.HandlerFunc, token *credential.Credential) *Client {
 	t.Helper()
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
-	return NewClient(ClientConfig{BaseURL: server.URL, TokenProvider: token})
+	return NewClient(ClientConfig{BaseURL: server.URL, Token: token})
 }
 
 func TestRequestGetDecodesJSON(t *testing.T) {
@@ -33,7 +35,7 @@ func TestRequestGetDecodesJSON(t *testing.T) {
 			t.Errorf("unexpected query: %s", r.URL.RawQuery)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"errcode": 0, "nickname": "alice"})
-	}, &staticTokenProvider{token: "token"})
+	}, fixedToken("token"))
 
 	type resp struct {
 		Nickname string `json:"nickname"`
@@ -53,7 +55,7 @@ func TestRequestWithoutToken(t *testing.T) {
 			t.Error("access token should be omitted")
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"openid": "test"})
-	}, &staticTokenProvider{token: "token"})
+	}, fixedToken("token"))
 
 	type resp struct {
 		OpenID string `json:"openid"`
@@ -193,8 +195,8 @@ func TestRequestRejectsOversizedResponse(t *testing.T) {
 
 func TestRequestNetworkErrorRedactsSecrets(t *testing.T) {
 	client := NewClient(ClientConfig{
-		BaseURL:       "http://127.0.0.1:1",
-		TokenProvider: &staticTokenProvider{token: "TOKEN-VALUE"},
+		BaseURL: "http://127.0.0.1:1",
+		Token:   fixedToken("TOKEN-VALUE"),
 	})
 
 	_, err := client.Request("/sns/jscode2session").

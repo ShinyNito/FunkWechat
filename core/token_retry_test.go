@@ -8,33 +8,35 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
+
+	"github.com/ShinyNito/FunkWechat/v3/internal/credential"
 )
 
-// rotatingTokenProvider 首次返回 old，刷新后返回 new。
-type rotatingTokenProvider struct {
-	refreshed  atomic.Bool
-	refreshes  atomic.Int32
+// rotatingToken 第一次获取返回 old，之后返回 new；refreshErr 非空时之后的获取都失败。
+type rotatingToken struct {
+	fetches    atomic.Int32
 	refreshErr error
 }
 
-func (p *rotatingTokenProvider) GetToken(context.Context) (string, error) {
-	if p.refreshed.Load() {
-		return "new", nil
-	}
-	return "old", nil
+func (p *rotatingToken) credential() *credential.Credential {
+	return credential.New(NewMemoryCache(), "token", func(context.Context) (string, time.Duration, error) {
+		if p.fetches.Add(1) == 1 {
+			return "old", time.Hour, nil
+		}
+		if p.refreshErr != nil {
+			return "", 0, p.refreshErr
+		}
+		return "new", time.Hour, nil
+	}, nil)
 }
 
-func (p *rotatingTokenProvider) RefreshToken(context.Context) (string, error) {
-	p.refreshes.Add(1)
-	if p.refreshErr != nil {
-		return "", p.refreshErr
-	}
-	p.refreshed.Store(true)
-	return "new", nil
+func (p *rotatingToken) refreshes() int32 {
+	return max(p.fetches.Load()-1, 0)
 }
 
 // newTokenCheckingServer 只接受 access_token=valid 的请求，其余返回 40001。
-func newTokenCheckingClient(t *testing.T, valid string, calls *atomic.Int32, token AccessTokenProvider) *Client {
+func newTokenCheckingClient(t *testing.T, valid string, calls *atomic.Int32, token *credential.Credential) *Client {
 	t.Helper()
 	return newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		calls.Add(1)
@@ -52,8 +54,8 @@ type valueResp struct {
 
 func TestRequestRefreshesTokenOnceOnTokenError(t *testing.T) {
 	var calls atomic.Int32
-	provider := &rotatingTokenProvider{}
-	client := newTokenCheckingClient(t, "new", &calls, provider)
+	provider := &rotatingToken{}
+	client := newTokenCheckingClient(t, "new", &calls, provider.credential())
 
 	got, err := client.Request("/api").
 		Body(map[string]string{"k": "v"}).
@@ -64,30 +66,30 @@ func TestRequestRefreshesTokenOnceOnTokenError(t *testing.T) {
 	if got.Value != "ok" {
 		t.Fatalf("unexpected value: %q", got.Value)
 	}
-	if calls.Load() != 2 || provider.refreshes.Load() != 1 {
-		t.Fatalf("calls = %d, refreshes = %d; want 2 and 1", calls.Load(), provider.refreshes.Load())
+	if calls.Load() != 2 || provider.refreshes() != 1 {
+		t.Fatalf("calls = %d, refreshes = %d; want 2 and 1", calls.Load(), provider.refreshes())
 	}
 }
 
 func TestRequestRetriesOnlyOnce(t *testing.T) {
 	var calls atomic.Int32
-	provider := &rotatingTokenProvider{}
-	client := newTokenCheckingClient(t, "never", &calls, provider)
+	provider := &rotatingToken{}
+	client := newTokenCheckingClient(t, "never", &calls, provider.credential())
 
 	_, err := client.Request("/api").Get[valueResp](context.Background())
 	if !IsTokenError(err) {
 		t.Fatalf("expected token error, got %v", err)
 	}
-	if calls.Load() != 2 || provider.refreshes.Load() != 1 {
-		t.Fatalf("calls = %d, refreshes = %d; want 2 and 1", calls.Load(), provider.refreshes.Load())
+	if calls.Load() != 2 || provider.refreshes() != 1 {
+		t.Fatalf("calls = %d, refreshes = %d; want 2 and 1", calls.Load(), provider.refreshes())
 	}
 }
 
 func TestRequestReturnsBothErrorsWhenRefreshFails(t *testing.T) {
 	var calls atomic.Int32
 	refreshErr := errors.New("refresh failed")
-	provider := &rotatingTokenProvider{refreshErr: refreshErr}
-	client := newTokenCheckingClient(t, "new", &calls, provider)
+	provider := &rotatingToken{refreshErr: refreshErr}
+	client := newTokenCheckingClient(t, "new", &calls, provider.credential())
 
 	_, err := client.Request("/api").Get[valueResp](context.Background())
 	if !IsTokenError(err) || !errors.Is(err, refreshErr) {
@@ -100,8 +102,8 @@ func TestRequestReturnsBothErrorsWhenRefreshFails(t *testing.T) {
 
 func TestRequestRetriesUpload(t *testing.T) {
 	var calls atomic.Int32
-	provider := &rotatingTokenProvider{}
-	client := newTokenCheckingClient(t, "new", &calls, provider)
+	provider := &rotatingToken{}
+	client := newTokenCheckingClient(t, "new", &calls, provider.credential())
 
 	got, err := client.Request("/upload").
 		File("media", "a.jpg", []byte("hello")).
@@ -109,22 +111,22 @@ func TestRequestRetriesUpload(t *testing.T) {
 	if err != nil || got.Value != "ok" {
 		t.Fatalf("got %+v, %v", got, err)
 	}
-	if calls.Load() != 2 || provider.refreshes.Load() != 1 {
-		t.Fatalf("calls = %d, refreshes = %d; want 2 and 1", calls.Load(), provider.refreshes.Load())
+	if calls.Load() != 2 || provider.refreshes() != 1 {
+		t.Fatalf("calls = %d, refreshes = %d; want 2 and 1", calls.Load(), provider.refreshes())
 	}
 }
 
 func TestRequestWithoutTokenDoesNotRetry(t *testing.T) {
 	var calls atomic.Int32
-	provider := &rotatingTokenProvider{}
-	client := newTokenCheckingClient(t, "new", &calls, provider)
+	provider := &rotatingToken{}
+	client := newTokenCheckingClient(t, "new", &calls, provider.credential())
 
 	_, err := client.Request("/api").WithoutToken().Get[valueResp](context.Background())
 	if !IsTokenError(err) {
 		t.Fatalf("expected token error, got %v", err)
 	}
-	if calls.Load() != 1 || provider.refreshes.Load() != 0 {
-		t.Fatalf("calls = %d, refreshes = %d; want 1 and 0", calls.Load(), provider.refreshes.Load())
+	if calls.Load() != 1 || provider.refreshes() != 0 {
+		t.Fatalf("calls = %d, refreshes = %d; want 1 and 0", calls.Load(), provider.refreshes())
 	}
 }
 
@@ -149,12 +151,12 @@ func TestStableTokenFetcher(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"access_token": "stable", "expires_in": 7200})
 	}, nil)
 
-	got, err := StableTokenFetcher(client, "app", "sec")(context.Background())
+	token, ttl, err := StableTokenFetcher(client, "app", "sec")(context.Background())
 	if err != nil {
 		t.Fatalf("fetch: %v", err)
 	}
-	if got.Token != "stable" || got.ExpiresIn != 7200 {
-		t.Fatalf("unexpected result: %+v", got)
+	if token != "stable" || ttl != 2*time.Hour {
+		t.Fatalf("token = %q, ttl = %v", token, ttl)
 	}
 }
 
@@ -162,7 +164,7 @@ func TestStableTokenFetcherReturnsWechatError(t *testing.T) {
 	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"errcode": ErrCodeInvalidAppSecret, "errmsg": "invalid appsecret"})
 	}, nil)
-	_, err := StableTokenFetcher(client, "app", "bad")(context.Background())
+	_, _, err := StableTokenFetcher(client, "app", "bad")(context.Background())
 	var wechatErr *WechatError
 	if !errors.As(err, &wechatErr) || wechatErr.ErrCode != ErrCodeInvalidAppSecret {
 		t.Fatalf("expected appsecret error, got %v", err)

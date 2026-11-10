@@ -53,7 +53,7 @@ func TestGetTicket(t *testing.T) {
 		t.Fatalf("new client: %v", err)
 	}
 
-	ticket, err := client.GetTicket(context.Background(), GetTicketRequest{Type: TicketTypeJSAPI})
+	ticket, err := client.GetTicket(context.Background(), TicketTypeJSAPI)
 	if err != nil {
 		t.Fatalf("get ticket: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestGetTicket(t *testing.T) {
 	}
 
 	// cache hit
-	ticket, err = client.GetTicket(context.Background(), GetTicketRequest{Type: TicketTypeJSAPI})
+	ticket, err = client.GetTicket(context.Background(), TicketTypeJSAPI)
 	if err != nil {
 		t.Fatalf("get ticket from cache: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestGetTicketIgnoresLegacyCacheFormat(t *testing.T) {
 		t.Fatalf("new client: %v", err)
 	}
 
-	ticket, err := client.GetTicket(context.Background(), GetTicketRequest{})
+	ticket, err := client.GetTicket(context.Background(), TicketTypeJSAPI)
 	if err != nil {
 		t.Fatalf("get ticket: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestRefreshTicketBypassesCache(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	if _, err := client.GetTicket(ctx, GetTicketRequest{}); err != nil {
+	if _, err := client.GetTicket(ctx, TicketTypeJSAPI); err != nil {
 		t.Fatalf("get ticket: %v", err)
 	}
 	ticket, err := client.RefreshTicket(ctx, TicketTypeJSAPI)
@@ -202,7 +202,7 @@ func TestRefreshTicketBypassesCache(t *testing.T) {
 	if ticket != "jsapi-2" {
 		t.Fatalf("ticket = %q; want jsapi-2", ticket)
 	}
-	cached, err := client.GetTicket(ctx, GetTicketRequest{Type: TicketTypeJSAPI})
+	cached, err := client.GetTicket(ctx, TicketTypeJSAPI)
 	if err != nil || cached != "jsapi-2" {
 		t.Fatalf("cached ticket = %q, %v; want jsapi-2", cached, err)
 	}
@@ -217,11 +217,11 @@ func TestTicketTypesAreCachedSeparately(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	jsapi, err := client.GetTicket(ctx, GetTicketRequest{Type: TicketTypeJSAPI})
+	jsapi, err := client.GetTicket(ctx, TicketTypeJSAPI)
 	if err != nil {
 		t.Fatalf("get jsapi ticket: %v", err)
 	}
-	card, err := client.GetTicket(ctx, GetTicketRequest{Type: TicketTypeWxCard})
+	card, err := client.GetTicket(ctx, TicketTypeWxCard)
 	if err != nil {
 		t.Fatalf("get wx_card ticket: %v", err)
 	}

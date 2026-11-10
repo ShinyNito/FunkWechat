@@ -140,7 +140,7 @@ func (r *Request) do(ctx context.Context, method string) (response, error) {
 
 	r.client.logger.LogAttrs(ctx, slog.LevelWarn, "wechat access token rejected, refreshing",
 		slog.String("path", r.path), slog.Any("error", err))
-	if _, refreshErr := r.client.token.RefreshToken(ctx); refreshErr != nil {
+	if _, refreshErr := r.client.token.Refresh(ctx); refreshErr != nil {
 		return resp, errors.Join(err, fmt.Errorf("refresh access token: %w", refreshErr))
 	}
 	return r.send(ctx, method, body, contentType)
@@ -189,7 +189,7 @@ func (r *Request) encode() ([]byte, string, error) {
 func (r *Request) send(ctx context.Context, method string, body []byte, contentType string) (response, error) {
 	query := maps.Clone(r.query)
 	if r.usesToken() {
-		token, err := r.client.token.GetToken(ctx)
+		token, err := r.client.token.Get(ctx)
 		if err != nil {
 			return response{}, fmt.Errorf("get access token: %w", err)
 		}

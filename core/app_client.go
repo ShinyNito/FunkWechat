@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"github.com/ShinyNito/FunkWechat/v3/internal/credential"
 )
 
 // AppConfig 使用 appid/appsecret 获取 access_token 的应用配置，小程序和公众号共用。
@@ -23,7 +25,7 @@ type AppClient struct {
 	// Config 补全默认值后的配置。
 	Config AppConfig
 	API    *Client
-	Tokens *TokenManager
+	Token  *credential.Credential
 }
 
 // NewAppClient 校验配置，创建通过稳定版接口获取 access_token 的 API 客户端。
@@ -48,22 +50,15 @@ func NewAppClient(cfg AppConfig, tokenCacheKeyPrefix string) (*AppClient, error)
 		Logger:     cfg.Logger,
 	})
 
-	tokens, err := NewTokenManager(TokenManagerConfig{
-		Cache:    cfg.Cache,
-		CacheKey: tokenCacheKeyPrefix + cfg.AppID,
-		Fetcher:  StableTokenFetcher(tokenClient, cfg.AppID, cfg.AppSecret),
-		Logger:   cfg.Logger,
-	})
-	if err != nil {
-		return nil, err
-	}
+	token := credential.New(cfg.Cache, tokenCacheKeyPrefix+cfg.AppID,
+		StableTokenFetcher(tokenClient, cfg.AppID, cfg.AppSecret), cfg.Logger)
 
 	api := NewClient(ClientConfig{
-		BaseURL:       cfg.BaseURL,
-		HTTPClient:    cfg.HTTPClient,
-		TokenProvider: tokens,
-		Logger:        cfg.Logger,
+		BaseURL:    cfg.BaseURL,
+		HTTPClient: cfg.HTTPClient,
+		Token:      token,
+		Logger:     cfg.Logger,
 	})
 
-	return &AppClient{Config: cfg, API: api, Tokens: tokens}, nil
+	return &AppClient{Config: cfg, API: api, Token: token}, nil
 }

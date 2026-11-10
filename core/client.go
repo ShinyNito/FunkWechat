@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/ShinyNito/FunkWechat/v3/internal/credential"
 )
 
 const (
@@ -18,16 +20,17 @@ const (
 type ClientConfig struct {
 	BaseURL string
 	// HTTPClient 为空时使用带连接池的默认客户端。
-	HTTPClient    *http.Client
-	TokenProvider AccessTokenProvider
-	Logger        *slog.Logger
+	HTTPClient *http.Client
+	// Token 为空时请求不附加 access_token。
+	Token  *credential.Credential
+	Logger *slog.Logger
 }
 
 // Client 发送微信 API 请求，负责附加 access_token、解析 errcode 和记录日志。
 type Client struct {
 	http    *http.Client
 	baseURL string
-	token   AccessTokenProvider
+	token   *credential.Credential
 	logger  *slog.Logger
 }
 
@@ -44,7 +47,7 @@ func NewClient(cfg ClientConfig) *Client {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Client{http: httpClient, baseURL: baseURL, token: cfg.TokenProvider, logger: logger}
+	return &Client{http: httpClient, baseURL: baseURL, token: cfg.Token, logger: logger}
 }
 
 // newDefaultHTTPClient 所有请求都发往同一个微信域名，默认每个主机只保留 2 个空闲连接，

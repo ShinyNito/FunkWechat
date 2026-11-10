@@ -1,9 +1,8 @@
 package officialaccount
 
 import (
-	"sync"
-
 	"github.com/ShinyNito/FunkWechat/v3/core"
+	"github.com/ShinyNito/FunkWechat/v3/internal/credential"
 )
 
 const accessTokenCacheKeyPrefix = "officialaccount:access_token:"
@@ -12,12 +11,10 @@ const accessTokenCacheKeyPrefix = "officialaccount:access_token:"
 type Config = core.AppConfig
 
 type Client struct {
-	cfg          Config
-	apiClient    *core.Client
-	tokenManager *core.TokenManager
-
-	ticketMu sync.Mutex
-	tickets  map[TicketType]*core.TokenManager
+	cfg       Config
+	apiClient *core.Client
+	token     *credential.Credential
+	tickets   map[TicketType]*credential.Credential
 }
 
 func New(cfg Config) (*Client, error) {
@@ -25,12 +22,9 @@ func New(cfg Config) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Client{
-		cfg:          app.Config,
-		apiClient:    app.API,
-		tokenManager: app.Tokens,
-		tickets:      make(map[TicketType]*core.TokenManager),
-	}, nil
+	c := &Client{cfg: app.Config, apiClient: app.API, token: app.Token}
+	c.tickets = newTicketCredentials(c)
+	return c, nil
 }
 
 // Request 创建请求，用于调用未封装的接口。
@@ -42,6 +36,7 @@ func (c *Client) Config() Config {
 	return c.cfg
 }
 
-func (c *Client) AccessTokenProvider() core.AccessTokenProvider {
-	return c.tokenManager
+// AccessToken 返回 access_token 凭证。
+func (c *Client) AccessToken() *credential.Credential {
+	return c.token
 }
