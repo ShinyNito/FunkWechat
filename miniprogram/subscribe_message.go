@@ -44,7 +44,7 @@ func (c *Client) SendSubscribeMessage(ctx context.Context, req SubscribeMessageR
 	}
 
 	_, err := c.Request(SendSubscribeMessagePath).
-		Body(req).
+		Body(&req).
 		Post[core.Status](ctx)
 	return err
 }

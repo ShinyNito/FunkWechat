@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
+## [3.1.0] - 2026-11-12
+
+### Changed
+- JSON request bodies now use `encoding/json/v2.Marshal` with its default semantics. Object keys are no longer sorted, nil maps encode as `{}`, nil slices encode as `[]`, and `omitempty` follows JSON-value emptiness. Code that depends on v1-specific request serialization should account for these changes.
+
+### Tests
+- Added a request-encoding benchmark with a five-field subscribe message.
+- Added coverage for JSON v2 defaults, including nil collections, zero-valued numeric fields, omitted empty strings, and literal HTML characters.
+
 ## [3.0.0] - 2026-11-10
 
 The module path is now `github.com/ShinyNito/FunkWechat/v3`. This release reshapes the API without compatibility shims.

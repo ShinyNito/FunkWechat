@@ -88,6 +88,27 @@ func TestRequestPostJSONDoesNotEscapeHTML(t *testing.T) {
 	}
 }
 
+func TestRequestJSONEncodingUsesV2Defaults(t *testing.T) {
+	body := struct {
+		Labels map[string]string `json:"labels"`
+		Items  []string          `json:"items"`
+		Empty  string            `json:"empty,omitempty"`
+		Count  int               `json:"count,omitempty"`
+		Text   string            `json:"text"`
+	}{Text: "a&b<c>"}
+	data, contentType, err := (&Request{}).Body(body).encode()
+	if err != nil || contentType != "application/json" {
+		t.Fatalf("encode = %s, %q, %v", data, contentType, err)
+	}
+	var got map[string]json.RawMessage
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 4 || string(got["labels"]) != "{}" || string(got["items"]) != "[]" || string(got["count"]) != "0" || string(got["text"]) != `"a&b<c>"` {
+		t.Errorf("encoded values = %s, want empty labels/items, zero count, omitted empty, and literal text", data)
+	}
+}
+
 func TestRequestMultipart(t *testing.T) {
 	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if err := r.ParseMultipartForm(1 << 20); err != nil {

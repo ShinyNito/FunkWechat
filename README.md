@@ -62,6 +62,8 @@ func main() {
 }
 ```
 
+请求 JSON 采用 `encoding/json/v2` 默认语义：对象键顺序由编码器决定，nil map 编码为 `{}`，nil slice 编码为 `[]`，`omitempty` 按 JSON 值判断。
+
 调用未封装的接口
 ----
 `Request` 默认附加 access_token。`Get[T]`、`Post[T]` 解码 JSON 响应；`GetRaw`、`PostRaw` 返回原始字节，用于小程序码这类成功时返回图片、失败时返回 JSON 的接口。errcode 非 0 时，所有终结方法都返回 `*core.WechatError`。

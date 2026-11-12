@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -214,14 +215,8 @@ func (r *Request) encode() ([]byte, string, error) {
 	if !r.hasJSONBody {
 		return nil, "", nil
 	}
-	var buf bytes.Buffer
-	encoder := json.NewEncoder(&buf)
-	// 微信接口按原样展示消息内容，不转义 <、>、&。
-	encoder.SetEscapeHTML(false)
-	if err := encoder.Encode(r.jsonBody); err != nil {
-		return nil, "", err
-	}
-	return bytes.TrimSuffix(buf.Bytes(), []byte("\n")), "application/json", nil
+	body, err := jsonv2.Marshal(r.jsonBody)
+	return body, "application/json", err
 }
 
 func (r *Request) send(ctx context.Context, method string, body []byte, contentType string, check func(response) error) (response, error) {
